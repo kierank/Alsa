@@ -1,0 +1,322 @@
+/*
+ * lx.h
+ *
+ *  Created on: 18 sept. 2015
+ *      Author: sylvain
+ */
+
+#ifndef SOUND_PCI_LXCOMMON_H_
+#define SOUND_PCI_LXCOMMON_H_
+
+
+#include <sound/core.h>
+#include <sound/pcm.h>
+#include <linux/interrupt.h>
+#include "lx_core.h"
+#include <uapi/sound/asound.h>
+#include <sound/info.h>
+#include <linux/atomic.h>
+#include <linux/kthread.h>
+
+
+//TODO Virer ce cardname !!!
+#define LXP "LX6464ES: "
+//static const char card_name[] = "LX6464ES";
+static const char card_name[] = "LX";
+
+
+enum {
+    ES_cmd_free         = 0,    /* no command executing */
+    ES_cmd_processing   = 1,	/* execution of a read/write command */
+    ES_read_pending     = 2,    /* a asynchron read command is pending */
+    ES_read_finishing   = 3,    /* a read command has finished waiting (set by
+				 * Interrupt or CancelIrp) */
+};
+
+enum lx_stream_status {
+/*	LX_STREAM_STATUS_FREE,*/
+/* 	LX_STREAM_STATUS_OPEN, */
+	LX_STREAM_STATUS_SCHEDULE_RUN,
+/* 	LX_STREAM_STATUS_STARTED, */
+	LX_STREAM_STATUS_RUNNING,
+	LX_STREAM_STATUS_SCHEDULE_STOP,
+ 	LX_STREAM_STATUS_STOPPED,
+/* 	LX_STREAM_STATUS_PAUSED */
+};
+
+
+struct lx_stream {
+	struct snd_pcm_substream  *stream;
+	snd_pcm_uframes_t          frame_pos;
+	volatile enum lx_stream_status      status; /* free, open, running, draining
+					    * pause */
+	unsigned int               is_capture:1;
+};
+
+enum lx_madi_clock_sync {
+	LXMADI_CLOCK_SYNC_MADI 			= 0x00,
+	LXMADI_CLOCK_SYNC_WORDCLOCK     = 0x01,
+	LXMADI_CLOCK_SYNC_INTERNAL      = 0x02,
+};
+
+enum lx_madi_word_clock_direction {
+	LXMADI_WORD_CLOCK_IN 	  = 0x00,
+	LXMADI_WORD_CLOCK_OUT     = 0x01,
+};
+
+enum lx_madi_rx_tx_mode {
+	LXMADI_SMUX 	  = 0x00,
+	LXMADI_LEGACY     = 0x01,
+};
+enum lx_madi_channel_mode {
+	LXMADI_24_56_CHANNELS 	  = 0x00,
+	LXMADI_32_64_CHANNELS     = 0x01,
+};
+
+enum lx_madi_clock_diviseur_mode {
+	LXMADI_256 	   = 0x00,
+	LXMADI_512     = 0x01,
+};
+
+enum lx_madi_sync_mode {
+	LXMADI_SYNC_INDEPENDENT = 0x00,
+	LXMADI_SYNC_MASTER,
+	LXMADI_SYNC_SLAVE,
+};
+
+enum lx_type {
+	LX_ETHERSOUND,
+	LX_MADI,
+	LX_IP,
+	LX_IP_MADI,
+};
+
+
+struct debug_irq_counters {
+	//irq part
+	unsigned int irq_play_begin; 			//wakeup just for play
+	unsigned int irq_play; 				//wakeup just for play
+	unsigned int irq_play_unhandled; 	//irq for hw but not handled any more by alsa (stop sequance)
+	unsigned int irq_record;			//wakeup just for record
+	unsigned int irq_record_unhandled; 	//irq for hw but not handled any more by alsa (stop sequance)
+	unsigned int irq_play_and_record;	        //wakeup for both
+	unsigned int irq_none;				//wakeup for someoneelse. somebodyelse is on the irq...
+	unsigned int irq_handled;			//the LX wake up us but for nothing important or for an error...
+	atomic_t atomic_irq_handled;
+	unsigned int irq_urun;
+	unsigned int irq_orun;
+	unsigned int irq_freq;
+	unsigned int irq_esa;
+	unsigned int irq_timer;
+	unsigned int irq_eot;
+	unsigned int irq_xes;
+	unsigned int irq_wakeup_thread;
+
+	//thread part
+	unsigned int thread_play; 				//wakeup just for play
+	unsigned int thread_record;				//wakeup just for record
+	unsigned int thread_play_and_record;	//wakeup for both
+	unsigned int wakeup_thread;
+	unsigned int irq_all;
+//	atomic_t irq_all;
+	u64 async_event_eobi;
+	u64 async_event_eobo;
+	u64 async_urun;
+	u64 async_orun;
+
+	unsigned int thread_record_but_stop;
+	unsigned int thread_play_but_stop;
+
+
+	//cmds
+	unsigned int cmd_irq_waiting;
+
+
+};
+
+struct lx6464es {
+	enum lx_type    lx_type;
+	unsigned int	lx_chip_index;
+	struct snd_card        *card;
+	struct pci_dev         *pci;
+	int			irq;
+
+	u8			mac_address[6];
+
+//	struct mutex		lock;        /* interrupt lock */
+	struct mutex            setup_mutex; /* mutex used in hw_params, open
+					      * and close */
+
+	struct snd_pcm_hardware pcm_hw;
+
+
+	//struct tasklet_struct   trigger_tasklet; /* trigger tasklet */
+	//struct tasklet_struct   tasklet_capture;
+	//struct tasklet_struct   tasklet_playback;
+
+	/* ports */
+	unsigned long		port_plx;	   /* io port (size=256) */
+	void __iomem           *port_plx_remapped; /* remapped plx port */
+	void __iomem           *port_dsp_bar;      /* memory port (32-bit,
+						    * non-prefetchable,
+						    * size=8K) */
+
+	/* messaging */
+	struct mutex		msg_lock;          /* message lock */
+	struct lx_rmh           rmh;
+	u32			irqsrc;
+
+	/* configuration */
+	uint			freq_ratio : 2;
+	uint                    playback_mute : 1;
+	uint                    hardware_running[2];
+	u32                     board_sample_rate; /* sample rate read from
+						    * board */
+	u16                     pcm_granularity;   /* board blocksize */
+
+	/* dma */
+	struct snd_dma_buffer   capture_dma_buf;
+	struct snd_dma_buffer   playback_dma_buf;
+
+	/* pcm */
+	struct snd_pcm         *pcm;
+
+	/* streams */
+	struct lx_stream        capture_stream;
+	struct lx_stream        playback_stream;
+	atomic_t play_xrun_advertise;
+	atomic_t capture_xrun_advertise;
+
+
+	/* special lx madi */
+	enum lx_madi_clock_sync use_clock_sync;
+	enum lx_madi_word_clock_direction word_clock_out;
+	int madi_frequency_selector;
+	enum lx_madi_rx_tx_mode rx_tx_mode;			//legacy/smux
+	enum lx_madi_channel_mode channel_mode;		//56/64 channels
+	enum lx_madi_clock_diviseur_mode diviseur_mode;
+	enum lx_madi_sync_mode multi_card_sync_mode;
+	struct snd_kcontrol *mixer_wordclock_out_ctl;
+	struct snd_kcontrol *mixer_current_clock_ctl;
+
+	//
+	atomic_t message_pending;
+
+
+	//Kthread
+	unsigned int thread_wakeup;
+	struct task_struct *pThread;
+	unsigned char thread_stop;
+	unsigned char thread_stream_update;
+
+	unsigned int irq_audio_cpt_play;				//compteur pour comparer celui de l embarqué.
+	unsigned int irq_audio_cpt_record;				//compteur pour comparer celui de l embarqué.
+
+	unsigned char play_period_multiple_gran;
+	unsigned char capture_period_multiple_gran;
+
+	//TODO DEBUG
+	struct debug_irq_counters debug_irq;
+	atomic_t irq_pending;
+
+	unsigned char capture_stream_prerared;
+	unsigned char playback_stream_prerared;
+
+	unsigned long jiffies_start;
+	unsigned long jiffies_1st_irq;
+};
+
+
+
+extern int lx_chips_count;
+extern struct lx6464es* lx_chips[];
+
+//find closest granularity between witch ask and one provide by hw
+int lx_set_granularity(struct lx6464es *chip, u32 gran);
+
+////allocate audio pipes an set granularity
+int lx_hardware_open(struct lx6464es *chip,
+			    struct snd_pcm_substream *substream);
+
+////start audio pipes
+int lx_stream_create_and_start(struct lx6464es *chip,
+			     struct snd_pcm_substream *substream);
+
+//stop audio pipes
+int lx_pipe_stop(struct lx6464es *chip,int is_capture);
+
+int lx_pipe_open(struct lx6464es *chip, int is_capture, int channels);
+
+//closes audio pipes
+int lx_pipe_close(struct lx6464es *chip, int is_capture);
+
+
+
+
+int lx_pcm_open(struct snd_pcm_substream *substream);
+
+int lx_pcm_close(struct snd_pcm_substream *substream);
+
+snd_pcm_uframes_t lx_pcm_stream_pointer(struct snd_pcm_substream *substream);
+
+int lx_pcm_prepare(struct snd_pcm_substream *substream);
+
+int lx_pcm_hw_params(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *hw_params);
+
+//int lx_pcm_hw_params_playback(struct snd_pcm_substream *substream,
+//				 struct snd_pcm_hw_params *hw_params);
+//
+//int lx_pcm_hw_params_capture(struct snd_pcm_substream *substream,
+//				 struct snd_pcm_hw_params *hw_params);
+
+int lx_pcm_hw_free(struct snd_pcm_substream *substream);
+
+void lx_trigger_pipe_start(struct lx6464es *chip, unsigned int is_capture);
+void lx_trigger_start_linked_stream(struct lx6464es *chip);
+
+void lx_trigger_pipes_start(struct lx6464es *chip);
+
+//void lx_trigger_stop(struct lx6464es *chip, struct lx_stream *lx_stream);
+
+
+void lx_trigger_tasklet_dispatch_stream(struct lx6464es *chip,
+					       struct lx_stream *lx_stream);
+
+
+
+int lx_pcm_trigger_dispatch(struct lx6464es *chip,
+				   struct lx_stream *lx_stream, int cmd);
+
+int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd);
+
+int snd_lx6464es_free(struct lx6464es *chip);
+
+int snd_lx6464es_dev_free(struct snd_device *device);
+
+int lx_init_xilinx_reset(struct lx6464es *chip);
+
+int lx_init_xilinx_test(struct lx6464es *chip);
+
+int lx_init_ethersound_config(struct lx6464es *chip);
+
+int lx_init_get_version_features(struct lx6464es *chip);
+
+int lx_init_dsp(struct lx6464es *chip);
+
+int lx_pcm_create(struct lx6464es *chip);
+
+//void lx_card_free(struct snd_card *card);
+
+//pic meters
+void lx_proc_levels_read(struct snd_info_entry *entry,
+				struct snd_info_buffer *buffer);
+
+int lx_proc_create(struct snd_card *card, struct lx6464es *chip);
+
+int lx_ip_get_clocks_status(struct lx6464es *chip);
+
+
+//void snd_lx_card_free(struct snd_card *card);
+
+#endif /* SOUND_PCI_LXCOMMON_H_ */
