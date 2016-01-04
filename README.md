@@ -1,2 +1,3 @@
 # Alsa
-Driver alsa for Digigram audio cards 
+Drivers alsa for Digigram audio cards :
+- LX : LX-MADI, LX-IP, LX-IP-MADI
