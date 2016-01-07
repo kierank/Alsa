@@ -8,8 +8,8 @@
 # obj-m :=  toto.o
 # obj-m +=  tata.o
 
-snd-lx6464es-objs := lx6464es.o lx_core.o lxcommon.o
-obj-m = snd-lx6464es.o
+#snd-lx6464es-objs := lx6464es.o lx_core.o lxcommon.o
+#obj-m = snd-lx6464es.o
 
 snd-lxmadi-objs := lxmadi.o  lxcommon.o lx_core.o
 obj-m += snd-lxmadi.o
