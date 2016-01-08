@@ -35,25 +35,6 @@
 int lx_chips_count = 0;
 struct lx_chip* lx_chips[SNDRV_CARDS]={NULL};
 
-static unsigned int lx_ip_external_freq_conversion[] =
-        {8000, 11025, 12000, 160000,
-        22050, 24000, 32000, 44100,
-        48000, 64000, 88200, 96000,
-        128000, 176400, 192000, 0};
-
-int lx_ip_get_clocks_status(struct lx_chip *chip)
-{
-        unsigned long clocks_status;
-
-        clocks_status = lx_dsp_reg_read(chip, eReg_MADI_RAVENNA_CLOCK_CFG);
-//printk(KERN_ERR "%s %lx -> %lx -> %lu\n",
-//                __func__,
-//                clocks_status,
-//                (clocks_status&0x000000F0)>>4,
-//              lx_ip_external_freq_conversion[(clocks_status&0x000000F0)>>4]);
-        return lx_ip_external_freq_conversion[(clocks_status&0x000000F0)>>4];
-}
-
 
 int lx_set_granularity(struct lx_chip *chip, u32 gran)
 {

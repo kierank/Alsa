@@ -316,6 +316,4 @@ void lx_proc_levels_read(struct snd_info_entry *entry,
 
 int lx_proc_create(struct snd_card *card, struct lx_chip *chip);
 
-int lx_ip_get_clocks_status(struct lx_chip *chip);
-
 #endif /* SOUND_PCI_LXCOMMON_H_ */

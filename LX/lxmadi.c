@@ -138,12 +138,12 @@ static unsigned int external_freq_conversion[] = {8000, 11025, 12000, 160000,
 
 #define MADI_CLOCK_SYNC_MASK            0x0000003
 #define MADI_GET_CLOCK_SYNC(val)        (val & MADI_CLOCK_SYNC_MASK)
-#define MADI_INTERNAL_FREQ_MASK         0x000000C
-#define MADI_GET_INTERNAL_FREQ(val)     ((val & MADI_INTERNAL_FREQ_MASK)>>2)
+#define IP_RAVENNA_FREQ_MASK         0x000000C
+#define IP_GET_RAVENNA_FREQ(val)     ((val & IP_RAVENNA_FREQ_MASK)>>2)
 #define MADI_CW_MASK                    0x0000010
 #define MADI_GET_CW(val)                ((val & MADI_CW_MASK)>> 4)
-#define MADI_CM_MASK                    0x0000020
-#define MADI_GET_CM(val)                ((val & MADI_CM_MASK)>> 5)
+#define IP_CM_MASK                    0x0000020
+#define IP_GET_CM(val)                ((val & IP_CM_MASK)>> 5)
 #define MADI_WO_MASK                    0x0000040
 #define MADI_GET_WO(val)                ((val & MADI_WO_MASK)>> 6)
 #define MADI_DIVISEUR_MASK              0x0000080
@@ -162,7 +162,7 @@ int lx_madi_get_clocks_status(struct lx_chip *chip,
         unsigned long clocks_status;
 
         clocks_status = lx_dsp_reg_read(chip, eReg_MADI_RAVENNA_CLOCK_CFG);
-//        printk(KERN_DEBUG "%s  %lx\n", __func__, clocks_status);
+//        printk(KERN_DEBUG "%s  %lxmadi %lx\n", __func__, clocks_status);
         if (clocks_informations != NULL) {
                 clocks_informations->madi_freq =
                 external_freq_conversion[MADI_GET_EXT_MADI_FREQ(clocks_status)];
@@ -170,10 +170,10 @@ int lx_madi_get_clocks_status(struct lx_chip *chip,
                 external_freq_conversion[MADI_GET_EXT_WORK_CLOCK_FREQ(clocks_status)];
                 clocks_informations->diviseur = MADI_GET_DIVISEUR(clocks_status);
                 clocks_informations->wo = MADI_GET_WO(clocks_status);
-                clocks_informations->cm = MADI_GET_CM(clocks_status);
+                clocks_informations->cm = IP_GET_CM(clocks_status);
                 clocks_informations->cw = MADI_GET_CW(clocks_status);
                 clocks_informations->internal_freq =
-                internal_freq_conversion[MADI_GET_INTERNAL_FREQ(clocks_status)];
+                internal_freq_conversion[IP_GET_RAVENNA_FREQ(clocks_status)];
                 clocks_informations->clock_sync =
                                 (clocks_status & MADI_CLOCK_SYNC_MASK);
         }
@@ -208,7 +208,7 @@ int lx_madi_set_clock_frequency(struct lx_chip *chip, int clock_frequency)
 
         clock_status = lx_dsp_reg_read(chip, eReg_MADI_RAVENNA_CLOCK_CFG);
 
-        clock_status &= ~(MADI_INTERNAL_FREQ_MASK);
+        clock_status &= ~(IP_RAVENNA_FREQ_MASK);
         clock_status |= (fpga_freq<<2);
         lx_dsp_reg_write(chip, eReg_MADI_RAVENNA_CLOCK_CFG, clock_status);
 

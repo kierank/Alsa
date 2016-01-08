@@ -125,6 +125,41 @@ static struct snd_pcm_hardware lx_ip_caps = {
         .periods_max      =             LXIP_USE_PERIODS_MAX,
 };
 
+
+
+struct ravenna_clocks_info {
+        unsigned char cm;              /* freq event on ravennas clock */
+        unsigned int ravenna_freq;    /* internal clock frequency */
+
+};
+
+static unsigned int ravenna_freq_conversion[] = {8000, 11025, 12000, 160000,
+                                                  22050, 24000, 32000, 44100,
+                                                  48000, 64000, 88200, 96000,
+                                                  128000, 176400, 192000, 0};
+#define IP_RAVENNA_FREQ_MASK         0x00000F0
+#define IP_GET_RAVENNA_FREQ(val)     ((val & IP_RAVENNA_FREQ_MASK)>>4)
+#define IP_CM_MASK                    0x0000001
+#define IP_GET_CM(val)                ((val & IP_CM_MASK)>> 0)
+
+
+int lx_ip_get_clocks_status(struct lx_chip *chip,
+                              struct ravenna_clocks_info *clocks_informations)
+{
+        int err = 0;
+        unsigned long clocks_status;
+
+        clocks_status = lx_dsp_reg_read(chip, eReg_MADI_RAVENNA_CLOCK_CFG);
+        printk(KERN_DEBUG "%s  lxip %lx\n", __func__, clocks_status);
+        if (clocks_informations != NULL) {
+                clocks_informations->cm = IP_GET_CM(clocks_status);
+                clocks_informations->ravenna_freq =
+                ravenna_freq_conversion[IP_GET_RAVENNA_FREQ(clocks_status)];
+        }
+        return err;
+}
+
+
 static int snd_clock_rate_info(struct snd_kcontrol *kcontrol,
                                 struct snd_ctl_elem_info *info)
 {
@@ -139,8 +174,11 @@ static int snd_clock_rate_get(struct snd_kcontrol *kcontrol,
                                struct snd_ctl_elem_value *value)
 {
         struct lx_chip *chip = snd_kcontrol_chip(kcontrol);
+        struct ravenna_clocks_info clocks_informations;
 
-        value->value.integer.value[0] = lx_ip_get_clocks_status(chip);
+        lx_ip_get_clocks_status(chip,
+                                &clocks_informations);
+        value->value.integer.value[0] = clocks_informations.ravenna_freq;
         return 0;
 }
 
@@ -254,6 +292,39 @@ static struct snd_kcontrol_new snd_lxip_controls[] = {
         },
 };
 
+
+
+
+
+void lx_ip_proc_get_clocks_status(struct snd_info_entry *entry,
+                                struct snd_info_buffer *buffer)
+{
+        struct ravenna_clocks_info clocks_informations;
+        struct lx_chip *chip = entry->private_data;
+
+        lx_ip_get_clocks_status(chip, &clocks_informations);
+
+        snd_iprintf(buffer,
+                "Ravenna freq change :        %s\n" \
+                "Internal frequency :      %d Hz\n",
+                clocks_informations.cm?"True":"False",
+                clocks_informations.ravenna_freq);
+}
+
+int lx_ip_proc_create(struct snd_card *card, struct lx_chip *chip)
+{
+        struct snd_info_entry *entry;
+        //clocks
+        int err = snd_card_proc_new(card, "Clocks", &entry);
+        if (err < 0) {
+                printk(KERN_ERR "%s, snd_card_proc_new clocks\n", __func__);
+                return err;
+        }
+
+        snd_info_set_text_ops(entry, chip, lx_ip_proc_get_clocks_status);
+
+        return 0;
+}
 
 static struct snd_pcm_ops lx_ops_playback = {
         .open           = lx_pcm_open,
@@ -502,6 +573,12 @@ static int snd_ip_create(struct snd_card *card,
                 printk(KERN_ERR "%s,lx_proc_create failed\n", __func__);
                 goto device_new_failed;
         }
+        err = lx_ip_proc_create(card, chip);
+        if (err < 0) {
+         printk(KERN_ERR "%s,lx_proc_create failed\n", __func__);
+         goto device_new_failed;
+        }
+
         for (idx = 0; idx < ARRAY_SIZE(snd_lxip_controls); idx++) {
                 kcontrol = snd_ctl_new1(&snd_lxip_controls[idx], chip);
                 err = snd_ctl_add(card, kcontrol);
