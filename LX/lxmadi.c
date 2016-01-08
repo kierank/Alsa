@@ -1039,10 +1039,13 @@ int lx_madi_pcm_prepare(struct snd_pcm_substream *substream)
                 }
         }
         if (runtime->channels > runtime->hw.channels_max) {
-                printk(KERN_WARNING
-                       "%s nb channels max %d\n",
+                printk(KERN_ERR
+                       "%s For rate %dHz nb channels max %d !!!\n",
                        __func__,
+                       runtime->rate,
                        runtime->hw.channels_max);
+                err = -EINVAL;
+                goto exit;
         }
 
 
