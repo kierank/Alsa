@@ -402,10 +402,10 @@ int lx_pcm_prepare(struct snd_pcm_substream *substream)
                 chip->capture_stream.frame_pos  = 0;
         }
 
-        buffer_size =   channels *
-                        3 *                    /* 24 bit samples | frame size  */
-                        periods *
-                        substream->runtime->period_size; /* frames per channels
+        buffer_size = channels *
+                      3 *                    /* 24 bit samples | frame size  */
+                      periods *
+                      substream->runtime->period_size; /* frames per channels
                                                           * | gran */
 
         err = lx_buffer_give(chip, 0, is_capture, buffer_size,

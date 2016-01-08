@@ -1043,8 +1043,6 @@ int lx_madi_pcm_prepare(struct snd_pcm_substream *substream)
                        "%s nb channels max %d\n",
                        __func__,
                        runtime->hw.channels_max);
-                err = -EINVAL;
-                goto exit;
         }
 
 
