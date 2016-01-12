@@ -1175,14 +1175,15 @@ void lx_proc_levels_read(struct snd_info_entry *entry,
 int lx_proc_create(struct snd_card *card, struct lx_chip *chip)
 {
         struct snd_info_entry *entry;
-        int err = snd_card_proc_new(card, "levels", &entry);
-        //        printk(KERN_DEBUG "%s\n", __func__);
-        if (err < 0) {
-                printk(KERN_ERR "%s, snd_card_proc_new\n", __func__);
-                return err;
-        }
-
-        snd_info_set_text_ops(entry, chip, lx_proc_levels_read);
+        int err = 0;
+//        err = snd_card_proc_new(card, "levels", &entry);
+//        //        printk(KERN_DEBUG "%s\n", __func__);
+//        if (err < 0) {
+//                printk(KERN_ERR "%s, snd_card_proc_new\n", __func__);
+//                return err;
+//        }
+//
+//        snd_info_set_text_ops(entry, chip, lx_proc_levels_read);
 
         err = snd_card_proc_new(card, "Irqs", &entry);
 //        printk(KERN_ERR "%s\n", __func__);
