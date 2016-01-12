@@ -1048,7 +1048,6 @@ int lx_madi_pcm_prepare(struct snd_pcm_substream *substream)
                 goto exit;
         }
 
-
         lx_madi_set_clock_diviseur(chip, (unsigned char)chip->diviseur_mode);
         lx_madi_set_madi_state(chip);
         lx_madi_set_clock_frequency(chip, substream->runtime->rate);
@@ -1472,6 +1471,7 @@ static int snd_lxmadi_probe(struct pci_dev *pci,
         sprintf(card->longname, "%s at 0x%lx, 0x%p, irq %i",
                 card->shortname, chip->port_plx,
                 chip->port_dsp_bar, chip->irq);
+        strcpy(chip->card->shortname, "LXMADI");
 
 
         err = snd_card_register(card);

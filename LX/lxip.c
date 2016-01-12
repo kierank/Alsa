@@ -674,10 +674,14 @@ static int snd_lxip_probe(struct pci_dev *pci,
                 sprintf(card->longname, "%s at 0x%lx, 0x%p, irq %i",
                         card->shortname, chip->port_plx,
                         chip->port_dsp_bar, chip->irq);
+                strcpy(chip->card->shortname, "LX-IP");
+
 
         }else if (chip->lx_type == LX_IP_MADI) {
                 strcpy(card->driver, "LX_IP_MADI");
                 sprintf(card->id, "LX_IP_MADI");
+                strcpy(chip->card->shortname, "LX-IP-MADI");
+
 
         }
 
