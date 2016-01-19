@@ -315,7 +315,7 @@ static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
 	}
 	return return_value;
 }
-/* #define RMH_DEBUG */
+
 #ifdef RMH_DEBUG
 #define LXRMH "lx_chip rmh: "
 static void lx_message_dump(struct lx_rmh *rmh)
@@ -346,7 +346,7 @@ static inline void lx_message_dump(struct lx_rmh *rmh)
 int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
 {
 	u32 reg = ED_DSP_TIMED_OUT;
-	int dwloop;
+	int loop;
 
 	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
 		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
@@ -360,14 +360,18 @@ int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
 	lx_dsp_reg_write(chip, eReg_CSM, REG_CSM_MC);
 
 	/* wait for device to answer */
-	dwloop = 0;
-	while ((atomic_read(&chip->message_pending) == 1) && (dwloop++ < 40000))
+	loop = 0;
+	while ((atomic_read(&chip->message_pending) == 1) && (loop++ < 40000))
 		udelay(1);
 
-	if (atomic_read(&chip->message_pending))
+	if (atomic_read(&chip->message_pending)){
 		dev_err(chip->card->dev,
 			"%s, message_pending timeout...\n",
 			__func__);
+		reg = -EIO;
+		goto exit;
+	}
+
 
 	if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
 		if (rmh->dsp_stat == 0)
@@ -384,7 +388,15 @@ polling_successful:
 	if ((reg & ERROR_VALUE) == 0) {
 		/* read response */
 		if (rmh->stat_len) {
-			snd_BUG_ON(rmh->stat_len >= (REG_CRM_NUMBER-1));
+			if (rmh->stat_len >= (REG_CRM_NUMBER-1)) {
+				/* these case must never appear
+				 * otherwise there is bug in embedded
+				 */
+				dev_err(chip->card->dev,
+					"rmh response length error\n");
+				reg = -EIO;
+				goto exit;
+			}
 			lx_dsp_reg_readbuf(chip, eReg_CRM2, rmh->stat,
 					rmh->stat_len);
 		}
@@ -404,8 +416,8 @@ polling_successful:
 		dev_warn(chip->card->dev, "lx_message_send: dsp crashed\n");
 		return -EAGAIN;
 	}
+exit:
 /*        lx_message_dump(rmh); */
-
 	return reg;
 }
 
@@ -438,15 +450,24 @@ int lx_message_send_atomic_poll(struct lx_chip *chip, struct lx_rmh *rmh)
 		}
 		udelay(1);
 	}
-
 	dev_warn(chip->card->dev,
 		"TIMEOUT lx_message_send_atomic_poll! polling failed\n");
+	reg = -EIO;
+	goto exit;
 
 polling_successful:
 	if ((reg & ERROR_VALUE) == 0) {
 		/* read response */
 		if (rmh->stat_len) {
-			snd_BUG_ON(rmh->stat_len >= (REG_CRM_NUMBER-1));
+			if (rmh->stat_len >= (REG_CRM_NUMBER-1)) {
+				/* these case must never appear
+				 * otherwise there is bug in embedded
+				 */
+				dev_err(chip->card->dev,
+					"rmh response length error\n");
+				reg = -EIO;
+				goto exit;
+			}
 			lx_dsp_reg_readbuf(chip, eReg_CRM2, rmh->stat,
 					rmh->stat_len);
 		}
@@ -467,8 +488,8 @@ polling_successful:
 		return -EAGAIN;
 	}
 
+exit:
 /*        lx_message_dump(rmh); */
-
 	return reg;
 }
 
