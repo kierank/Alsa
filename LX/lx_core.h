@@ -56,7 +56,7 @@ enum {
 	eMaxPortLx
 };
 
-unsigned long lx_dsp_reg_read(struct lx_chip *chip, int port);
+unsigned int lx_dsp_reg_read(struct lx_chip *chip, int port);
 void lx_dsp_reg_write(struct lx_chip *chip, int port, unsigned data);
 
 /* plx register access */
@@ -93,7 +93,6 @@ struct lx_rmh {
 };
 
 /* low-level dsp access */
-void lx_message_init(struct lx_rmh *rmh, enum cmd_mb_opcodes cmd);
 int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh);
 int lx_dsp_get_version(struct lx_chip *chip, u32 *rdsp_version);
 int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq);
@@ -225,5 +224,37 @@ extern struct lx_chip *lx_chips_slave;
 extern struct lx_chip *lx_chips_master;
 
 int lx_interrupt_debug_events(struct lx_chip *chip);
+
+
+struct madi_status {
+	unsigned char mute;
+	unsigned char channel_mode;
+	unsigned char tx_frame_mode;
+	unsigned char rx_frame_mode;
+	unsigned char carrier_error;
+	unsigned char lock_error;
+	unsigned char async_error;
+	unsigned char madi_freq;
+};
+
+#define MADI_MUTE_MASK			0x0000001
+#define MADI_GET_MUTE(val)		(val & MADI_MUTE_MASK)
+#define MADI_CHANNEL_MODE_MASK		0x0000002
+#define MADI_GET_CHANNEL_MODE(val)	((val & MADI_CHANNEL_MODE_MASK) >> 1)
+#define MADI_TX_FRAME_MODE_MASK		0x0000004
+#define MADI_GET_TX_FRAME_MODE(val)	((val & MADI_TX_FRAME_MODE_MASK) >> 2)
+#define MADI_RX_FRAME_MODE_MASK		0x0000008
+#define MADI_GET_RX_FRAME_MODE(val)	((val & MADI_RX_FRAME_MODE_MASK) >> 3)
+
+#define MADI_CARRIER_ERROR_MASK		0x0000001
+#define MADI_GET_CARRIER_ERROR(val)	(val & MADI_CARRIER_ERROR_MASK)
+#define MADI_LOCK_ERROR_MASK		0x0000002
+#define MADI_GET_LOCK_ERROR(val)	((val & MADI_LOCK_ERROR_MASK) >> 1)
+#define MADI_ASYNC_ERROR_MASK		0x0000004
+#define MADI_GET_ASYNC_ERROR(val)	((val & MADI_ASYNC_ERROR_MASK) >> 2)
+#define MADI_MADI_FREQ_MASK		0x0000030
+#define MADI_GET_MADI_FREQ(val)		((val & MADI_MADI_FREQ_MASK) >> 4)
+int lx_madi_get_madi_state(struct lx_chip *chip, struct madi_status *status);
+
 
 #endif /* LX_CORE_H */

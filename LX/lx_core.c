@@ -7,16 +7,8 @@
 
 /* #define RMH_DEBUG 1 */
 
-#include <linux/bitops.h>
 #include <linux/module.h>
-#include <linux/pci.h>
 #include <linux/delay.h>
-#include <linux/printk.h>
-#include <linux/irqreturn.h>
-#include <linux/freezer.h>
-#include <linux/sched.h>
-#include <linux/kthread.h>
-#include <linux/interrupt.h>
 
 #include "lxcommon.h"
 #include "lx_core.h"
@@ -28,7 +20,7 @@ MODULE_PARM_DESC(indexcpu, "CPU affinity for irq.");
 struct lx_chip *lx_chips_slave;
 struct lx_chip *lx_chips_master;
 
-DECLARE_WAIT_QUEUE_HEAD(thread_wait_queue);
+DECLARE_WAIT_QUEUE_HEAD(thread_lx_wait_queue);
 /* low-level register access */
 
 static const unsigned long dsp_port_offsets[] = {
@@ -72,15 +64,16 @@ static void __iomem *lx_dsp_register(struct lx_chip *chip, int port)
 	return base_address + dsp_port_offsets[port] * 4;
 }
 
-unsigned long lx_dsp_reg_read(struct lx_chip *chip, int port)
+unsigned int lx_dsp_reg_read(struct lx_chip *chip, int port)
 {
 	void __iomem *address = lx_dsp_register(chip, port);
 
 	return ioread32(address);
 }
 
-static void lx_dsp_reg_readbuf(struct lx_chip *chip, int port, u32 *data,
-		u32 len)
+static void lx_dsp_reg_readbuf(struct lx_chip *chip, int port,
+				unsigned int *data,
+				u32 len)
 {
 	u32 __iomem *address = lx_dsp_register(chip, port);
 	int i;
@@ -153,8 +146,8 @@ void lx_plx_reg_write(struct lx_chip *chip, int port, u32 data)
 #define CMD_NAME(a) NULL
 #endif
 
-#define Reg_CSM_MR                        0x00000002
-#define Reg_CSM_MC                        0x00000001
+#define REG_CSM_MR                        0x00000002
+#define REG_CSM_MC                        0x00000001
 
 struct dsp_cmd_info {
 	/* Op Code of the command (usually 1st 24-bits word).*/
@@ -295,23 +288,32 @@ static struct dsp_cmd_info dsp_commands[] =
             CMD_NAME("SET_MADI_STATE") },
 };
 
-void lx_message_init(struct lx_rmh *rmh, enum cmd_mb_opcodes cmd)
+static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
 {
-	snd_BUG_ON(cmd >= CMD_INVALID);
+	char return_value;
 
-        rmh->cmd[0]   = dsp_commands[cmd].dcCodeOp;
-        rmh->cmd_len  = dsp_commands[cmd].dcCmdLength;
-        rmh->stat_len = dsp_commands[cmd].dcStatusLength;
-        rmh->dsp_stat = dsp_commands[cmd].dcStatusType;
-        rmh->cmd_idx  = cmd;
-        memset(&rmh->cmd[1], 0, (REG_CRM_NUMBER - 1) * sizeof(u32));
+	if (cmd >= CMD_INVALID) {
+		dev_err(chip->card->dev,
+			"%s unkown command...\n",__func__);
+		return_value = -EINVAL;
+	}
+	else {
+		return_value = 0;
+		chip->rmh.cmd[0]   = dsp_commands[cmd].dcCodeOp;
+		chip->rmh.cmd_len  = dsp_commands[cmd].dcCmdLength;
+		chip->rmh.stat_len = dsp_commands[cmd].dcStatusLength;
+		chip->rmh.dsp_stat = dsp_commands[cmd].dcStatusType;
+		chip->rmh.cmd_idx  = cmd;
+		memset(&chip->rmh.cmd[1], 0, (REG_CRM_NUMBER - 1) * sizeof(u32));
 
 #ifdef CONFIG_SND_DEBUG
-	memset(rmh->stat, 0, REG_CRM_NUMBER * sizeof(u32));
+		memset(chip->rmh.stat, 0, REG_CRM_NUMBER * sizeof(u32));
 #endif
 #ifdef RMH_DEBUG
-	rmh->cmd_idx = cmd;
+		chip->rmh.cmd_idx = cmd;
 #endif
+	}
+	return return_value;
 }
 /* #define RMH_DEBUG */
 #ifdef RMH_DEBUG
@@ -346,7 +348,7 @@ int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
 	u32 reg = ED_DSP_TIMED_OUT;
 	int dwloop;
 
-	if (lx_dsp_reg_read(chip, eReg_CSM) & (Reg_CSM_MC | Reg_CSM_MR)) {
+	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
 		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
 		return -EBUSY;
 	}
@@ -355,7 +357,7 @@ int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
 	lx_dsp_reg_writebuf(chip, eReg_CRM1, rmh->cmd, rmh->cmd_len);
 	atomic_set(&chip->message_pending, 1);
 	/* MicroBlaze gogogo */
-	lx_dsp_reg_write(chip, eReg_CSM, Reg_CSM_MC);
+	lx_dsp_reg_write(chip, eReg_CSM, REG_CSM_MC);
 
 	/* wait for device to answer */
 	dwloop = 0;
@@ -367,7 +369,7 @@ int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
 			"%s, message_pending timeout...\n",
 			__func__);
 
-	if (lx_dsp_reg_read(chip, eReg_CSM) & Reg_CSM_MR) {
+	if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
 		if (rmh->dsp_stat == 0)
 			reg = lx_dsp_reg_read(chip, eReg_CRM1);
 		else
@@ -413,7 +415,7 @@ int lx_message_send_atomic_poll(struct lx_chip *chip, struct lx_rmh *rmh)
 	u32 reg = ED_DSP_TIMED_OUT;
 	int dwloop;
 
-	if (lx_dsp_reg_read(chip, eReg_CSM) & (Reg_CSM_MC | Reg_CSM_MR)) {
+	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
 		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
 		return -EBUSY;
 	}
@@ -422,11 +424,11 @@ int lx_message_send_atomic_poll(struct lx_chip *chip, struct lx_rmh *rmh)
 	lx_dsp_reg_writebuf(chip, eReg_CRM1, rmh->cmd, rmh->cmd_len);
 
 	/* MicroBlaze gogogo */
-	lx_dsp_reg_write(chip, eReg_CSM, Reg_CSM_MC);
+	lx_dsp_reg_write(chip, eReg_CSM, REG_CSM_MC);
 
 	/* wait for device to answer */
 	for (dwloop = 0; dwloop != XILINX_TIMEOUT_MS * 1000; ++dwloop) {
-		if (lx_dsp_reg_read(chip, eReg_CSM) & Reg_CSM_MR) {
+		if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
 			if (rmh->dsp_stat == 0)
 				reg = lx_dsp_reg_read(chip, eReg_CRM1);
 			else
@@ -476,13 +478,14 @@ int lx_dsp_get_version(struct lx_chip *chip, u32 *rdsp_version)
 	u16 ret;
 
 	mutex_lock(&chip->msg_lock);
-
-	lx_message_init(&chip->rmh, CMD_01_GET_SYS_CFG);
+	ret = lx_message_init(chip, CMD_01_GET_SYS_CFG);
+	if (ret < 0)
+		goto exit;
 	ret = lx_message_send_atomic(chip, &chip->rmh);
-
 	*rdsp_version = chip->rmh.stat[1];
-	mutex_unlock(&chip->msg_lock);
 
+exit:
+	mutex_unlock(&chip->msg_lock);
 	return ret;
 }
 
@@ -495,7 +498,10 @@ int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 
 	mutex_lock(&chip->msg_lock);
 
-	lx_message_init(&chip->rmh, CMD_01_GET_SYS_CFG);
+	ret = lx_message_init(chip, CMD_01_GET_SYS_CFG);
+	if (ret < 0)
+		goto exit;
+
 	ret = lx_message_send_atomic(chip, &chip->rmh);
 
 	if (ret == 0) {
@@ -512,10 +518,12 @@ int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 		}
 	}
 
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	*rfreq = frequency * chip->freq_ratio;
-
+	if (ret < 0)
+		*rfreq = 0;
+	else
+		*rfreq = frequency * chip->freq_ratio;
 	return ret;
 }
 
@@ -543,10 +551,14 @@ int lx_dsp_set_granularity(struct lx_chip *chip, u32 gran)
 
 	mutex_lock(&chip->msg_lock);
 
-	lx_message_init(&chip->rmh, CMD_02_SET_GRANULARITY);
-	chip->rmh.cmd[0] |= gran;
+	ret = lx_message_init(chip, CMD_02_SET_GRANULARITY);
+	if (ret < 0)
+		goto exit;
 
+	chip->rmh.cmd[0] |= gran;
 	ret = lx_message_send_atomic(chip, &chip->rmh);
+
+exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
 }
@@ -557,15 +569,18 @@ int lx_dsp_read_async_events(struct lx_chip *chip, u32 *data)
 
 	mutex_lock(&chip->msg_lock);
 
-	lx_message_init(&chip->rmh, CMD_04_GET_EVENT);
+	ret = lx_message_init(chip, CMD_04_GET_EVENT);
+	if (ret < 0)
+		goto exit;
+
 	/* we don't necessarily need the full length */
 	chip->rmh.stat_len = 10;
 
 	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
-
 	if (!ret)
 		memcpy(data, chip->rmh.stat, chip->rmh.stat_len * sizeof(u32));
 
+exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
 }
@@ -577,44 +592,46 @@ int lx_dsp_read_async_events(struct lx_chip *chip, u32 *data)
 int lx_pipe_allocate(struct lx_chip *chip, u32 pipe, int is_capture,
 		int channels)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_06_ALLOCATE_PIPE);
+	ret = lx_message_init(chip, CMD_06_ALLOCATE_PIPE);
+	if (ret < 0)
+		goto exit;
 
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= channels;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	if (err != 0)
+	if (ret != 0)
 		dev_err(chip->card->dev, "could not allocate pipe\n");
-
-	return err;
+	return ret;
 }
 
 int lx_pipe_release(struct lx_chip *chip, u32 pipe, int is_capture)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_07_RELEASE_PIPE);
-
+	ret = lx_message_init(chip, CMD_07_RELEASE_PIPE);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	return err;
+	return ret;
 }
 
 int lx_buffer_ask(struct lx_chip *chip, u32 pipe, int is_capture, u32 *r_needed,
 		u32 *r_freed, u32 *size_array)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 #ifdef CONFIG_SND_DEBUG
@@ -626,13 +643,14 @@ int lx_buffer_ask(struct lx_chip *chip, u32 pipe, int is_capture, u32 *r_needed,
 	*r_freed = 0;
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_08_ASK_BUFFERS);
-
+	ret = lx_message_init(chip, CMD_08_ASK_BUFFERS);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
 
-	if (!err) {
+	if (!ret) {
 		int i;
 
 		for (i = 0; i < MAX_STREAM_BUFFER; ++i) {
@@ -665,52 +683,58 @@ int lx_buffer_ask(struct lx_chip *chip, u32 pipe, int is_capture, u32 *r_needed,
 		dev_err(chip->card->dev, "lx_buffer_ask failed\n");
 	}
 
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 int lx_pipe_stop_single(struct lx_chip *chip, u32 pipe, int is_capture)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 /*printk(KERN_DEBUG "\t\t%s, is_capture: %d\n", __func__, is_capture);*/
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_09_STOP_PIPE);
-
+	ret = lx_message_init(chip, CMD_09_STOP_PIPE);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
-
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 static int lx_pipe_toggle_state(struct lx_chip *chip, u32 pipe, int is_capture)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 /* printk(KERN_DEBUG "\t\t%s, is_capture: %d\n", __func__, is_capture); */
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0B_TOGGLE_PIPE_STATE);
+	ret = lx_message_init(chip, CMD_0B_TOGGLE_PIPE_STATE);
+	if (ret < 0)
+		goto exit;
 
 	chip->rmh.cmd[0] |= pipe_cmd;
+	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
 
-	err = lx_message_send_atomic_poll(chip, &chip->rmh);
-
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 static int lx_pipe_toggle_state_play_and_record(struct lx_chip *chip)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = 1 << 12;
 
 	mutex_lock(&chip->msg_lock);
 
-	lx_message_init(&chip->rmh, CMD_0B_TOGGLE_PIPE_STATE);
+	ret = lx_message_init(chip, CMD_0B_TOGGLE_PIPE_STATE);
+	if (ret < 0)
+		goto exit;
 	/* in this case we have to specify pipes mask for play and record */
 	chip->rmh.cmd_len = 5;
 	chip->rmh.cmd[0] |= pipe_cmd;
@@ -719,21 +743,23 @@ static int lx_pipe_toggle_state_play_and_record(struct lx_chip *chip)
 	chip->rmh.cmd[3] = 0;
 	chip->rmh.cmd[4] = 1;
 
-	err = lx_message_send_atomic_poll(chip, &chip->rmh);
-
+	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 static int lx_pipe_toggle_state_play_and_record_dual(
 		struct lx_chip *master_chip, struct lx_chip *slave_chip)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = 1 << 12;
 /*printk(KERN_DEBUG "\t\t\t%s %p %p\n", __func__, master_chip, slave_chip);*/
 
 	mutex_lock(&master_chip->msg_lock);
-	lx_message_init(&master_chip->rmh, CMD_0B_TOGGLE_PIPE_STATE);
+	ret = lx_message_init(master_chip, CMD_0B_TOGGLE_PIPE_STATE);
+	if (ret < 0)
+		goto exit;
 	/* in this case we have to specify pipes mask for play and record */
 	master_chip->rmh.cmd_len = 5;
 	master_chip->rmh.cmd[0] |= pipe_cmd;
@@ -742,7 +768,7 @@ static int lx_pipe_toggle_state_play_and_record_dual(
 	master_chip->rmh.cmd[3] = 0;
 	master_chip->rmh.cmd[4] = 1;
 
-	lx_message_init(&slave_chip->rmh, CMD_0B_TOGGLE_PIPE_STATE);
+	lx_message_init(slave_chip, CMD_0B_TOGGLE_PIPE_STATE);
 	/* in this case we have to specify pipes mask for play and record */
 	slave_chip->rmh.cmd_len = 5;
 	slave_chip->rmh.cmd[0] |= pipe_cmd;
@@ -751,12 +777,12 @@ static int lx_pipe_toggle_state_play_and_record_dual(
 	slave_chip->rmh.cmd[3] = 0;
 	slave_chip->rmh.cmd[4] = 1;
 
-	err = lx_message_send_atomic(master_chip, &master_chip->rmh);
+	ret = lx_message_send_atomic(master_chip, &master_chip->rmh);
+	ret += lx_message_send_atomic(slave_chip, &slave_chip->rmh);
 
-	err += lx_message_send_atomic(slave_chip, &slave_chip->rmh);
-
+exit:
 	mutex_unlock(&master_chip->msg_lock);
-	return err;
+	return ret;
 }
 
 int lx_pipe_start_single(struct lx_chip *chip, u32 pipe, int is_capture)
@@ -878,18 +904,19 @@ int lx_pipe_start_pause_play_and_record_dual(struct lx_chip *master_chip,
 int lx_pipe_sample_count(struct lx_chip *chip, u32 pipe, int is_capture,
 		u64 *rsample_count)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0A_GET_PIPE_SPL_COUNT);
+	ret = lx_message_init(chip, CMD_0A_GET_PIPE_SPL_COUNT);
+	if (ret < 0)
+		goto exit;
 
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.stat_len = 2; /* need all words here! */
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
-
-	if (err != 0)
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+	if (ret != 0)
 		dev_err(chip->card->dev,
 				"could not query pipe's sample count\n");
 	else {
@@ -898,29 +925,30 @@ int lx_pipe_sample_count(struct lx_chip *chip, u32 pipe, int is_capture,
 		+ chip->rmh.stat[1]; /* lo part */
 	}
 
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 int lx_pipe_state(struct lx_chip *chip, u32 pipe, int is_capture, u16 *rstate)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-
-	lx_message_init(&chip->rmh, CMD_0A_GET_PIPE_SPL_COUNT);
+	ret = lx_message_init(chip, CMD_0A_GET_PIPE_SPL_COUNT);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
-	err = lx_message_send_atomic_poll(chip, &chip->rmh);
+	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
 
-	if (err != 0)
+	if (ret != 0)
 		dev_err(chip->card->dev, "could not query pipe's state\n");
 	else
 		*rstate = (chip->rmh.stat[0] >> PSTATE_OFFSET) & 0x0F;
-
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	return err;
+	return ret;
 }
 
 static int lx_pipe_wait_for_state(struct lx_chip *chip, u32 pipe,
@@ -972,30 +1000,65 @@ int lx_pipe_wait_for_idle(struct lx_chip *chip, u32 pipe, int is_capture)
 int lx_stream_set_state(struct lx_chip *chip, u32 pipe, int is_capture,
 		enum stream_state_t state)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_13_SET_STREAM_STATE);
-
+	ret = lx_message_init(chip, CMD_13_SET_STREAM_STATE);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= state;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
-	if (err != 0) {
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+	if (ret != 0) {
 		dev_err(chip->card->dev,
 			"%s->lx_message_send_atomic failed...\n",
 			__func__);
 	}
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	return err;
+	return ret;
 }
 
+int lx_madi_get_madi_state(struct lx_chip *chip, struct madi_status *status)
+{
+	int ret;
+
+	mutex_lock(&chip->msg_lock);
+	ret = lx_message_init(chip, CMD_14_GET_MADI_STATE);
+	if (ret < 0)
+		goto exit;
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+	if (ret < 0) {
+		dev_err(chip->card->dev,
+			"%s->lx_message_send_atomic failed...\n",
+			__func__);
+	}
+
+	if (status != NULL) {
+
+		status->mute = MADI_GET_MUTE(chip->rmh.stat[0]);
+		status->channel_mode = MADI_GET_CHANNEL_MODE(chip->rmh.stat[0]);
+		status->tx_frame_mode = MADI_GET_TX_FRAME_MODE(
+				chip->rmh.stat[0]);
+		status->rx_frame_mode = MADI_GET_RX_FRAME_MODE(
+				chip->rmh.stat[0]);
+
+		status->carrier_error = MADI_GET_CARRIER_ERROR(
+				chip->rmh.stat[1]);
+		status->lock_error = MADI_GET_LOCK_ERROR(chip->rmh.stat[1]);
+		status->async_error = MADI_GET_ASYNC_ERROR(chip->rmh.stat[1]);
+		status->madi_freq = MADI_GET_MADI_FREQ(chip->rmh.stat[1]);
+	}
+exit:
+	mutex_unlock(&chip->msg_lock);
+	return ret;
+}
 int lx_stream_def(struct lx_chip *chip, struct snd_pcm_runtime *runtime,
 		u32 pipe, int is_capture)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 	u32 channels = runtime->channels;
 
@@ -1004,8 +1067,9 @@ int lx_stream_def(struct lx_chip *chip, struct snd_pcm_runtime *runtime,
 				runtime->channels, channels);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0C_DEF_STREAM);
-
+	ret = lx_message_init(chip, CMD_0C_DEF_STREAM);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
 	chip->rmh.cmd[0] |= MASK_STREAM_IS_ALSA;
@@ -1022,48 +1086,51 @@ int lx_stream_def(struct lx_chip *chip, struct snd_pcm_runtime *runtime,
 
 	chip->rmh.cmd[0] |= channels - 1;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	return err;
+	return ret;
 }
 
 int lx_stream_state(struct lx_chip *chip, u32 pipe, int is_capture, int *rstate)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0E_GET_STREAM_SPL_COUNT);
-
+	ret = lx_message_init(chip, CMD_0E_GET_STREAM_SPL_COUNT);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
 
 	*rstate = (chip->rmh.stat[0] & SF_START) ? START_STATE : PAUSE_STATE;
-
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 int lx_stream_sample_position(struct lx_chip *chip, u32 pipe, int is_capture,
 		u64 *r_bytepos)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0E_GET_STREAM_SPL_COUNT);
-
+	ret = lx_message_init(chip, CMD_0E_GET_STREAM_SPL_COUNT);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
 
 	*r_bytepos = ((u64)(chip->rmh.stat[0] & MASK_SPL_COUNT_HI) << 32)
 			+ chip->rmh.stat[1];
 
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 /* low-level buffer handling */
@@ -1071,14 +1138,15 @@ int lx_buffer_give(struct lx_chip *chip, u32 pipe, int is_capture,
 		u32 buffer_size, u32 buf_address_lo, u32 buf_address_hi,
 		u32 *r_buffer_index, unsigned char period_multiple_gran)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 /*printk(KERN_DEBUG "%s, period_multiple_gran %d\n", __func__,
 *	period_multiple_gran);
 */
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0F_UPDATE_BUFFER);
-
+	ret = lx_message_init(chip, CMD_0F_UPDATE_BUFFER);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 	/* request interrupt notification */
 	chip->rmh.cmd[0] |= BF_NOTIFY_EOB | BF_CIRCULAR;
@@ -1095,45 +1163,46 @@ int lx_buffer_give(struct lx_chip *chip, u32 pipe, int is_capture,
 		chip->rmh.cmd[0] |= BF_64BITS_ADR;
 	}
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
 
-	if (err == 0) {
+	if (ret == 0) {
 		*r_buffer_index = chip->rmh.stat[0];
-		goto done;
+		goto exit;
 	}
 
-	if (err == EB_RBUFFERS_TABLE_OVERFLOW)
+	if (ret == EB_RBUFFERS_TABLE_OVERFLOW)
 		dev_err(chip->card->dev,
 				"lx_buffer_give EB_RBUFFERS_TABLE_OVERFLOW\n");
 
-	if (err == EB_INVALID_STREAM)
+	if (ret == EB_INVALID_STREAM)
 		dev_err(chip->card->dev, "lx_buffer_give EB_INVALID_STREAM\n");
 
-	if (err == EB_CMD_REFUSED)
+	if (ret == EB_CMD_REFUSED)
 		dev_err(chip->card->dev, "lx_buffer_give EB_CMD_REFUSED\n");
 
-done:
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 int lx_buffer_cancel(struct lx_chip *chip, u32 pipe, int is_capture,
 		u32 buffer_index)
 {
-	int err;
+	int ret;
 	u32 pipe_cmd = PIPE_INFO_TO_CMD(is_capture, pipe);
 /* printk(KERN_DEBUG "%s\n", __func__); */
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_11_CANCEL_BUFFER);
-
+	ret = lx_message_init(chip, CMD_11_CANCEL_BUFFER);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= buffer_index;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-
-	return err;
+	return ret;
 }
 
 /* low-level gain/peak handling
@@ -1143,22 +1212,23 @@ int lx_buffer_cancel(struct lx_chip *chip, u32 pipe, int is_capture,
  */
 int lx_level_unmute(struct lx_chip *chip, int is_capture, int unmute)
 {
-	int err;
+	int ret;
 	/* bit set to 1: channel muted */
 	u64 mute_mask = unmute ? 0 : 0xFFFFFFFFFFFFFFFFLLU;
 
 	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_0D_SET_MUTE);
-
+	ret = lx_message_init(chip, CMD_0D_SET_MUTE);
+	if (ret < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= PIPE_INFO_TO_CMD(is_capture, 0);
 
 	chip->rmh.cmd[1] = (u32)(mute_mask >> (u64)32); /* hi part */
 	chip->rmh.cmd[2] = (u32)(mute_mask & (u64)0xFFFFFFFF); /* lo part */
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
-
+	ret = lx_message_send_atomic(chip, &chip->rmh);
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 static u32 peak_map[] = {0x00000109, /* -90.308dB */
@@ -1182,19 +1252,21 @@ static u32 peak_map[] = {0x00000109, /* -90.308dB */
 int lx_level_peaks(struct lx_chip *chip, int is_capture, int channels,
 		u32 *r_levels)
 {
-	int err = 0;
+	int ret = 0;
 	int i;
 
 	mutex_lock(&chip->msg_lock);
 	for (i = 0; i < channels; i += 4) {
 		u32 s0, s1, s2, s3;
 
-		lx_message_init(&chip->rmh, CMD_12_GET_PEAK);
+		ret = lx_message_init(chip, CMD_12_GET_PEAK);
+		if (ret < 0)
+			goto exit;
 		chip->rmh.cmd[0] |= PIPE_INFO_TO_CMD(is_capture, i);
 
-		err = lx_message_send_atomic(chip, &chip->rmh);
+		ret = lx_message_send_atomic(chip, &chip->rmh);
 
-		if (err == 0) {
+		if (ret == 0) {
 			s0 = peak_map[chip->rmh.stat[0] & 0x0F];
 			s1 = peak_map[(chip->rmh.stat[0] >> 4) & 0xf];
 			s2 = peak_map[(chip->rmh.stat[0] >> 8) & 0xf];
@@ -1209,9 +1281,9 @@ int lx_level_peaks(struct lx_chip *chip, int is_capture, int channels,
 
 		r_levels += 4;
 	}
-
+exit:
 	mutex_unlock(&chip->msg_lock);
-	return err;
+	return ret;
 }
 
 /* interrupt handling */
@@ -1264,7 +1336,7 @@ void lx_wakeup_audio_thread(struct lx_chip *chip)
 /* Phase 1: Top half, in IRQ. */
 	if (chip->pThread != NULL) {
 		chip->thread_wakeup++;
-		wake_up(&thread_wait_queue); /* => bh_handler */
+		wake_up(&thread_lx_wait_queue); /* => bh_handler */
 	}
 }
 ;
@@ -1545,7 +1617,9 @@ int lx_madi_set_madi_state(struct lx_chip *chip)
 
 	mutex_lock(&chip->msg_lock);
 
-	lx_message_init(&chip->rmh, CMD_15_SET_MADI_STATE);
+	err = lx_message_init(chip, CMD_15_SET_MADI_STATE);
+	if (err < 0)
+		goto exit;
 	chip->rmh.cmd[0] |= (0x01 & chip->channel_mode);
 	if (chip->rx_tx_mode == 0)
 		chip->rmh.cmd[1] |= 0x00000000;
@@ -1558,7 +1632,7 @@ int lx_madi_set_madi_state(struct lx_chip *chip)
 			"%s->lx_message_send_atomic failed...\n",
 			__func__);
 	}
-
+exit:
 	mutex_unlock(&chip->msg_lock);
 	return err;
 }

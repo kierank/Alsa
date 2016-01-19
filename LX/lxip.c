@@ -437,10 +437,10 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 	chip->pci = pci;
 	chip->irq = -1;
 	if (pci->subsystem_device ==
-	PCIEX_SUBDEVICE_ID_DIGIGRAM_LXIP_SERIAL_SUBSYSTEM) {
+	PCI_SUBDEVICE_ID_DIGIGRAM_LXIP_SUBSYSTEM) {
 		chip->lx_type = LX_IP;
 	} else if (pci->subsystem_device ==
-	PCIEX_SUBDEVICE_ID_DIGIGRAM_LXIP_MADI_SERIAL_SUBSYSTEM) {
+	PCI_SUBDEVICE_ID_DIGIGRAM_LXIP_MADI_SUBSYSTEM) {
 		chip->lx_type = LX_IP_MADI;
 	}
 

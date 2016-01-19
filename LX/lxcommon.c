@@ -689,7 +689,7 @@ int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 */
 			if (lx_stream->status ==
 					LX_STREAM_STATUS_SCHEDULE_STOP)
-				dev_err(link_chip->card->dev,
+				dev_err(chip->card->dev,
 					"%s, SCHEDULE_STOP forbidden state\n",
 					__func__);
 
