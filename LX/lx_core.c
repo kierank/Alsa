@@ -112,7 +112,6 @@ static void lx_dsp_reg_readbuf(struct lx_chip *chip, int port, u32 *data,
         }
 }
 
-
 void lx_dsp_reg_write(struct lx_chip *chip, int port, unsigned data)
 {
         void __iomem *address = lx_dsp_register(chip, port);
