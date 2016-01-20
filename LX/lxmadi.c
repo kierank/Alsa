@@ -1188,7 +1188,7 @@ static int snd_lxmadi_create(struct snd_card *card, struct pci_dev *pci,
 	chip->lx_chip_index = lx_chips_count;
 
 	/* request resources */
-	err = pci_request_regions(pci, card_name);
+	err = pci_request_regions(pci, "LX_MADI");
 	if (err < 0)
 		goto request_regions_failed;
 
@@ -1435,7 +1435,9 @@ static void snd_lxmadi_remove(struct pci_dev *pci)
 }
 
 static struct pci_driver lxmadi_driver = {
-	.name = "LX-MADI",
+        .name =     KBUILD_MODNAME,
+
+/*	.name = "LX-MADI",*/
 	.id_table = snd_lxmadi_ids,
 	.probe = snd_lxmadi_probe,
 	.remove = snd_lxmadi_remove,

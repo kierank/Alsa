@@ -17,10 +17,6 @@
 #include <linux/atomic.h>
 #include <linux/kthread.h>
 
-/* TODO Virer ce cardname !!! */
-#define LXP "LX6464ES: "
-static const char card_name[] = "LX";
-
 enum {
 	ES_cmd_free = 0,	/* no command executing */
 	ES_cmd_processing = 1,	/* execution of a read/write command */

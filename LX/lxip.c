@@ -715,8 +715,8 @@ static void snd_lxip_remove(struct pci_dev *pci)
 }
 
 static struct pci_driver lxip_driver = {
-/*        .name =     KBUILD_MODNAME,*/
-	.name = "LX_IP_MADI",
+        .name =     KBUILD_MODNAME,
+	/*.name = "LX_IP_MADI",*/
 	.id_table = snd_lxip_ids,
 	.probe = snd_lxip_probe,
 	.remove = snd_lxip_remove,

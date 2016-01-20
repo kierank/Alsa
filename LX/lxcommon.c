@@ -17,6 +17,9 @@
 int lx_chips_count;
 struct lx_chip *lx_chips[SNDRV_CARDS] = {NULL};
 
+#define LXP "LX: "
+static const char card_name[] = "LX";
+
 int lx_set_granularity(struct lx_chip *chip, u32 gran)
 {
 	int err = 0;
@@ -214,7 +217,8 @@ int lx_pcm_open(struct snd_pcm_substream *substream)
 		break;
 
 	default:
-		return -ENODEV;
+		err = -ENODEV;
+		goto exit;
 	}
 	snd_pcm_set_sync(substream);
 	if (err > 0)
@@ -305,6 +309,7 @@ int lx_pcm_prepare(struct snd_pcm_substream *substream)
 	u32 buffer_size = 0;
 	u32 buffer_index = 0;
 	unsigned char period_multiple_gran = 0;
+	unsigned int loop = 40000; /* for 40ms timeout */
 	struct lx_stream *lx_stream = is_capture ?
 			&chip->capture_stream : &chip->playback_stream;
 
@@ -317,12 +322,20 @@ int lx_pcm_prepare(struct snd_pcm_substream *substream)
 *        channels);
 */
 
-	while ((lx_stream->status == LX_STREAM_STATUS_SCHEDULE_STOP))
-		;
+	while ((lx_stream->status == LX_STREAM_STATUS_SCHEDULE_STOP) &&
+			loop-- > 0)
+		udelay(1);
+	if(loop == 0)
+		dev_err(chip->card->dev,
+			"timeout append when waiting for stream to stop\n");
+
 	mutex_lock(&chip->setup_mutex);
 
 	if (substream->runtime->period_size < chip->pcm_granularity) {
-		dev_err(chip->card->dev,
+		/* this is REALLY important.
+		 * The period size HAS TO BE a multiple of period size
+		 */
+		dev_warn(chip->card->dev,
 		"period size (%d) has to be multiple of dma granularity (%d)\n",
 		(unsigned int)substream->runtime->period_size,
 		chip->pcm_granularity);
@@ -332,7 +345,10 @@ int lx_pcm_prepare(struct snd_pcm_substream *substream)
 	} else {
 		if ((substream->runtime->period_size % chip->pcm_granularity)
 				!= 0) {
-			dev_err(chip->card->dev,
+			/* this is REALLY important.
+			 * The period size HAS TO BE a multiple of period size
+			 */
+			dev_warn(chip->card->dev,
 	"period size (%d) has to be multiple of dma granularity (%d) %d\n",
 			(unsigned int)substream->runtime->period_size,
 			chip->pcm_granularity,
@@ -445,7 +461,8 @@ int lx_pcm_hw_free(struct snd_pcm_substream *substream)
 	struct lx_chip *chip = snd_pcm_substream_chip(substream);
 	int err = 0;
 	int is_capture = (substream->stream == SNDRV_PCM_STREAM_CAPTURE);
-	int i = 0;
+	int loop = 40000;
+	int i;
 	struct lx_stream *lx_stream = is_capture ?
 			&chip->capture_stream : &chip->playback_stream;
 
@@ -458,14 +475,13 @@ int lx_pcm_hw_free(struct snd_pcm_substream *substream)
 */
 	/* if command pending */
 	while ((lx_stream->status == LX_STREAM_STATUS_SCHEDULE_STOP)
-			&& (i < 1000)) {
-
+			&& (loop > 0)) {
 		udelay(1);
-		i++;
 	}
-	if (i >= 1000) {
+	if (loop <= 0) {
 		dev_err(chip->card->dev, "%s TIMEOUT\n", __func__);
-		return -EIO;
+		err = -EIO;
+		goto exit;
 	}
 	lx_trigger_stream_stop(chip, is_capture);
 
@@ -474,7 +490,7 @@ int lx_pcm_hw_free(struct snd_pcm_substream *substream)
 		lx_buffer_cancel(chip, 0, is_capture, i);
 
 	err = snd_pcm_lib_free_pages(substream);
-
+exit:
 	mutex_unlock(&chip->setup_mutex);
 /*        printk(KERN_DEBUG  "%s  err %d\n", __func__, err); */
 
@@ -755,8 +771,10 @@ int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return err;
 }
 
-int snd_lx_free(struct lx_chip *chip)
+int snd_lx_dev_free(struct snd_device *device)
 {
+	struct lx_chip *chip = device->device_data;
+
 /*        printk(KERN_DEBUG  "%s\n", __func__); */
 	lx_irq_disable(chip);
 	if (chip->irq >= 0)
@@ -768,12 +786,6 @@ int snd_lx_free(struct lx_chip *chip)
 	kfree(chip);
 
 	return 0;
-}
-
-int snd_lx_dev_free(struct snd_device *device)
-{
-/*        printk(KERN_DEBUG "%s\n", __func__); */
-	return snd_lx_free(device->device_data);
 }
 
 #define START_PLX_INIT                (0xDECADECA)
