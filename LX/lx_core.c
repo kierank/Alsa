@@ -5,10 +5,11 @@
  * Copyright (c) 2016 Jubier Sylvain <alsa@digigram.com>
  */
 
-/* #define RMH_DEBUG 1 */
+/*#define RMH_DEBUG 1*/
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/printk.h>
 
 #include "lxcommon.h"
 #include "lx_core.h"
@@ -343,118 +344,78 @@ static inline void lx_message_dump(struct lx_rmh *rmh)
 #define XILINX_POLL_NO_SLEEP    100
 #define XILINX_POLL_ITERATIONS  150
 
-int lx_message_send_atomic(struct lx_chip *chip, struct lx_rmh *rmh)
+enum atomic_response_type {
+	ATOMIC_RESPONSE_BY_EVENT = 0x00,
+	ATOMIC_RESPONSE_BY_POLLING = 0x01,
+};
+
+int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
+		unsigned char response_type )
 {
 	u32 reg = ED_DSP_TIMED_OUT;
 	int loop;
-
 	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
 		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
 		return -EBUSY;
 	}
 
-	/* write command */
 	lx_dsp_reg_writebuf(chip, eReg_CRM1, rmh->cmd, rmh->cmd_len);
-	atomic_set(&chip->message_pending, 1);
+
+	if(response_type == ATOMIC_RESPONSE_BY_EVENT)
+		atomic_set(&chip->message_pending, 1);
+
 	/* MicroBlaze gogogo */
 	lx_dsp_reg_write(chip, eReg_CSM, REG_CSM_MC);
 
-	/* wait for device to answer */
-	loop = 0;
-	while ((atomic_read(&chip->message_pending) == 1) && (loop++ < 40000))
-		udelay(1);
+	loop = XILINX_TIMEOUT_MS * 1000;
+	switch (response_type) {
+	case ATOMIC_RESPONSE_BY_EVENT :
+		while ((atomic_read(&chip->message_pending) == 1) && (loop-- > 0))
+			udelay(1);
 
-	if (atomic_read(&chip->message_pending)){
-		dev_err(chip->card->dev,
-			"%s, message_pending timeout...\n",
-			__func__);
-		reg = -EIO;
-		goto exit;
-	}
-
-
-	if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
-		if (rmh->dsp_stat == 0)
-			reg = lx_dsp_reg_read(chip, eReg_CRM1);
-		else
-			reg = 0;
-		goto polling_successful;
-	}
-
-	dev_warn(chip->card->dev,
-		"TIMEOUT lx_message_send_atomic! polling failed\n");
-
-polling_successful:
-	if ((reg & ERROR_VALUE) == 0) {
-		/* read response */
-		if (rmh->stat_len) {
-			if (rmh->stat_len >= (REG_CRM_NUMBER-1)) {
-				/* these case must never appear
-				 * otherwise there is bug in embedded
-				 */
-				dev_err(chip->card->dev,
-					"rmh response length error\n");
-				reg = -EIO;
-				goto exit;
-			}
-			lx_dsp_reg_readbuf(chip, eReg_CRM2, rmh->stat,
-					rmh->stat_len);
+		if (atomic_read(&chip->message_pending)){
+			dev_err(chip->card->dev,
+				"%s, message_pending timeout...\n",
+				__func__);
+			reg = -EIO;
+			goto exit;
 		}
-	} else {
-		dev_err(chip->card->dev, "rmh error: %08x\n", reg);
-	}
 
-	/* clear Reg_CSM_MR */
-	lx_dsp_reg_write(chip, eReg_CSM, 0);
 
-	switch (reg) {
-	case ED_DSP_TIMED_OUT:
-		dev_warn(chip->card->dev, "lx_message_send: dsp timeout\n");
-		return -ETIMEDOUT;
-
-	case ED_DSP_CRASHED:
-		dev_warn(chip->card->dev, "lx_message_send: dsp crashed\n");
-		return -EAGAIN;
-	}
-exit:
-/*        lx_message_dump(rmh); */
-	return reg;
-}
-
-/* for 1st commands we don t have interrupt */
-int lx_message_send_atomic_poll(struct lx_chip *chip, struct lx_rmh *rmh)
-{
-	u32 reg = ED_DSP_TIMED_OUT;
-	int dwloop;
-
-	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
-		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
-		return -EBUSY;
-	}
-
-	/* write command */
-	lx_dsp_reg_writebuf(chip, eReg_CRM1, rmh->cmd, rmh->cmd_len);
-
-	/* MicroBlaze gogogo */
-	lx_dsp_reg_write(chip, eReg_CSM, REG_CSM_MC);
-
-	/* wait for device to answer */
-	for (dwloop = 0; dwloop != XILINX_TIMEOUT_MS * 1000; ++dwloop) {
 		if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
 			if (rmh->dsp_stat == 0)
 				reg = lx_dsp_reg_read(chip, eReg_CRM1);
 			else
 				reg = 0;
-
 			goto polling_successful;
 		}
-		udelay(1);
-	}
-	dev_warn(chip->card->dev,
-		"TIMEOUT lx_message_send_atomic_poll! polling failed\n");
-	reg = -EIO;
-	goto exit;
 
+		dev_warn(chip->card->dev,
+			"TIMEOUT lx_message_send_atomic! polling failed\n");
+		lx_message_dump(rmh);
+
+		break;
+	case  ATOMIC_RESPONSE_BY_POLLING:
+		while(loop--> 0) {
+			if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
+				if (rmh->dsp_stat == 0)
+					reg = lx_dsp_reg_read(chip, eReg_CRM1);
+				else
+					reg = 0;
+
+				goto polling_successful;
+			}
+			udelay(1);
+		}
+		dev_warn(chip->card->dev,
+			"TIMEOUT lx_message_send_atomic_poll! polling failed\n");
+
+		lx_message_dump(rmh);
+		reg = -EIO;
+		goto exit;
+
+		break;
+	}
 polling_successful:
 	if ((reg & ERROR_VALUE) == 0) {
 		/* read response */
@@ -474,7 +435,6 @@ polling_successful:
 	} else {
 		dev_err(chip->card->dev, "rmh error: %08x\n", reg);
 	}
-
 	/* clear Reg_CSM_MR */
 	lx_dsp_reg_write(chip, eReg_CSM, 0);
 
@@ -502,7 +462,8 @@ int lx_dsp_get_version(struct lx_chip *chip, u32 *rdsp_version)
 	ret = lx_message_init(chip, CMD_01_GET_SYS_CFG);
 	if (ret < 0)
 		goto exit;
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+					ATOMIC_RESPONSE_BY_EVENT);
 	*rdsp_version = chip->rmh.stat[1];
 
 exit:
@@ -523,7 +484,8 @@ int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 	if (ret < 0)
 		goto exit;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+					ATOMIC_RESPONSE_BY_EVENT);
 
 	if (ret == 0) {
 		freq_raw = chip->rmh.stat[0] >> FREQ_FIELD_OFFSET;
@@ -577,7 +539,8 @@ int lx_dsp_set_granularity(struct lx_chip *chip, u32 gran)
 		goto exit;
 
 	chip->rmh.cmd[0] |= gran;
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 exit:
 	mutex_unlock(&chip->msg_lock);
@@ -597,7 +560,8 @@ int lx_dsp_read_async_events(struct lx_chip *chip, u32 *data)
 	/* we don't necessarily need the full length */
 	chip->rmh.stat_len = 10;
 
-	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+					ATOMIC_RESPONSE_BY_POLLING);
 	if (!ret)
 		memcpy(data, chip->rmh.stat, chip->rmh.stat_len * sizeof(u32));
 
@@ -624,7 +588,8 @@ int lx_pipe_allocate(struct lx_chip *chip, u32 pipe, int is_capture,
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= channels;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	if (ret != 0)
@@ -643,7 +608,8 @@ int lx_pipe_release(struct lx_chip *chip, u32 pipe, int is_capture)
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -669,7 +635,8 @@ int lx_buffer_ask(struct lx_chip *chip, u32 pipe, int is_capture, u32 *r_needed,
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+					ATOMIC_RESPONSE_BY_EVENT);
 
 	if (!ret) {
 		int i;
@@ -721,7 +688,8 @@ int lx_pipe_stop_single(struct lx_chip *chip, u32 pipe, int is_capture)
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -739,7 +707,8 @@ static int lx_pipe_toggle_state(struct lx_chip *chip, u32 pipe, int is_capture)
 		goto exit;
 
 	chip->rmh.cmd[0] |= pipe_cmd;
-	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+					ATOMIC_RESPONSE_BY_POLLING);
 
 exit:
 	mutex_unlock(&chip->msg_lock);
@@ -764,7 +733,8 @@ static int lx_pipe_toggle_state_play_and_record(struct lx_chip *chip)
 	chip->rmh.cmd[3] = 0;
 	chip->rmh.cmd[4] = 1;
 
-	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_POLLING);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -798,8 +768,10 @@ static int lx_pipe_toggle_state_play_and_record_dual(
 	slave_chip->rmh.cmd[3] = 0;
 	slave_chip->rmh.cmd[4] = 1;
 
-	ret = lx_message_send_atomic(master_chip, &master_chip->rmh);
-	ret += lx_message_send_atomic(slave_chip, &slave_chip->rmh);
+	ret = lx_message_send_atomic_generic(master_chip, &master_chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
+	ret += lx_message_send_atomic_generic(slave_chip, &slave_chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 exit:
 	mutex_unlock(&master_chip->msg_lock);
@@ -936,7 +908,8 @@ int lx_pipe_sample_count(struct lx_chip *chip, u32 pipe, int is_capture,
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.stat_len = 2; /* need all words here! */
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 	if (ret != 0)
 		dev_err(chip->card->dev,
 				"could not query pipe's sample count\n");
@@ -961,7 +934,8 @@ int lx_pipe_state(struct lx_chip *chip, u32 pipe, int is_capture, u16 *rstate)
 	if (ret < 0)
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
-	ret = lx_message_send_atomic_poll(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_POLLING);
 
 	if (ret != 0)
 		dev_err(chip->card->dev, "could not query pipe's state\n");
@@ -1031,7 +1005,8 @@ int lx_stream_set_state(struct lx_chip *chip, u32 pipe, int is_capture,
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= state;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 	if (ret != 0) {
 		dev_err(chip->card->dev,
 			"%s->lx_message_send_atomic failed...\n",
@@ -1050,7 +1025,8 @@ int lx_madi_get_madi_state(struct lx_chip *chip, struct madi_status *status)
 	ret = lx_message_init(chip, CMD_14_GET_MADI_STATE);
 	if (ret < 0)
 		goto exit;
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 	if (ret < 0) {
 		dev_err(chip->card->dev,
 			"%s->lx_message_send_atomic failed...\n",
@@ -1107,7 +1083,8 @@ int lx_stream_def(struct lx_chip *chip, struct snd_pcm_runtime *runtime,
 
 	chip->rmh.cmd[0] |= channels - 1;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -1124,7 +1101,8 @@ int lx_stream_state(struct lx_chip *chip, u32 pipe, int is_capture, int *rstate)
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 	*rstate = (chip->rmh.stat[0] & SF_START) ? START_STATE : PAUSE_STATE;
 exit:
@@ -1144,7 +1122,8 @@ int lx_stream_sample_position(struct lx_chip *chip, u32 pipe, int is_capture,
 		goto exit;
 	chip->rmh.cmd[0] |= pipe_cmd;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 	*r_bytepos = ((u64)(chip->rmh.stat[0] & MASK_SPL_COUNT_HI) << 32)
 			+ chip->rmh.stat[1];
@@ -1184,7 +1163,8 @@ int lx_buffer_give(struct lx_chip *chip, u32 pipe, int is_capture,
 		chip->rmh.cmd[0] |= BF_64BITS_ADR;
 	}
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 	if (ret == 0) {
 		*r_buffer_index = chip->rmh.stat[0];
@@ -1220,7 +1200,8 @@ int lx_buffer_cancel(struct lx_chip *chip, u32 pipe, int is_capture,
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[0] |= buffer_index;
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -1246,7 +1227,8 @@ int lx_level_unmute(struct lx_chip *chip, int is_capture, int unmute)
 	chip->rmh.cmd[1] = (u32)(mute_mask >> (u64)32); /* hi part */
 	chip->rmh.cmd[2] = (u32)(mute_mask & (u64)0xFFFFFFFF); /* lo part */
 
-	ret = lx_message_send_atomic(chip, &chip->rmh);
+	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 exit:
 	mutex_unlock(&chip->msg_lock);
 	return ret;
@@ -1285,7 +1267,8 @@ int lx_level_peaks(struct lx_chip *chip, int is_capture, int channels,
 			goto exit;
 		chip->rmh.cmd[0] |= PIPE_INFO_TO_CMD(is_capture, i);
 
-		ret = lx_message_send_atomic(chip, &chip->rmh);
+		ret = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 
 		if (ret == 0) {
 			s0 = peak_map[chip->rmh.stat[0] & 0x0F];
@@ -1647,7 +1630,8 @@ int lx_madi_set_madi_state(struct lx_chip *chip)
 	else
 		chip->rmh.cmd[1] |= 0x00000003;
 
-	err = lx_message_send_atomic(chip, &chip->rmh);
+	err = lx_message_send_atomic_generic(chip, &chip->rmh,
+						ATOMIC_RESPONSE_BY_EVENT);
 	if (err != 0) {
 		dev_err(chip->card->dev,
 			"%s->lx_message_send_atomic failed...\n",
