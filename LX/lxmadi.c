@@ -1366,7 +1366,7 @@ static int snd_lxmadi_probe(struct pci_dev *pci,
 		dev_err(&pci->dev,
 			"%s, error during snd_lxmadi_create\n",
 			__func__);
-		goto out_free;
+		return -ENOENT;
 	}
 
 	card->private_data = chip;

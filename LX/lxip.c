@@ -638,7 +638,7 @@ static int snd_lxip_probe(struct pci_dev *pci,
 	if (err < 0) {
 		dev_err(&pci->dev,
 			"%s, error during snd_lxip_create\n", __func__);
-		goto out_free;
+		return -ENOENT;
 	}
 	card->private_data = chip;
 
