@@ -52,22 +52,27 @@ enum lx_madi_clock_sync {
 };
 
 enum lx_madi_word_clock_direction {
-	LXMADI_WORD_CLOCK_IN = 0x00, LXMADI_WORD_CLOCK_OUT = 0x01,
+	LXMADI_WORD_CLOCK_IN = 0x00,
+	LXMADI_WORD_CLOCK_OUT = 0x01,
 };
 
 enum lx_madi_rx_tx_mode {
-	LXMADI_SMUX = 0x00, LXMADI_LEGACY = 0x01,
+	LXMADI_SMUX = 0x00,
+	LXMADI_LEGACY = 0x01,
 };
 enum lx_madi_channel_mode {
-	LXMADI_24_56_CHANNELS = 0x00, LXMADI_32_64_CHANNELS = 0x01,
+	LXMADI_24_56_CHANNELS = 0x00,
+	LXMADI_32_64_CHANNELS = 0x01,
 };
 
 enum lx_madi_clock_diviseur_mode {
-	LXMADI_256 = 0x00, LXMADI_512 = 0x01,
+	LXMADI_256 = 0x00,
+	LXMADI_512 = 0x01,
 };
 
 enum lx_madi_sync_mode {
-	LXMADI_SYNC_INDEPENDENT = 0x00, LXMADI_SYNC_MASTER, LXMADI_SYNC_SLAVE,
+	LXMADI_SYNC_INDEPENDENT = 0x00,
+	LXMADI_SYNC_MASTER, LXMADI_SYNC_SLAVE,
 };
 
 enum lx_type {
