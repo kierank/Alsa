@@ -208,18 +208,6 @@ void lx_proc_get_irq_counter(struct snd_info_entry *entry,
 #define START_STATE             1
 #define PAUSE_STATE             0
 
-static inline void unpack_pointer(dma_addr_t ptr, u32 *r_low, u32 *r_high)
-{
-	*r_low = (u32)(ptr & 0xffffffff);
-#if BITS_PER_LONG == 32
-	*r_high = 0;
-#else
-	*r_high = (u32)((u64)ptr >> 32);
-#endif
-}
-
-void lx_wakeup_audio_thread(struct lx_chip *chip);
-
 extern struct lx_chip *lx_chips_slave;
 extern struct lx_chip *lx_chips_master;
 

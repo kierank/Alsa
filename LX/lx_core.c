@@ -21,9 +21,7 @@ MODULE_PARM_DESC(indexcpu, "CPU affinity for irq.");
 struct lx_chip *lx_chips_slave;
 struct lx_chip *lx_chips_master;
 
-DECLARE_WAIT_QUEUE_HEAD(thread_lx_wait_queue);
 /* low-level register access */
-
 static const unsigned long dsp_port_offsets[] = {
         0,
         0x400,
@@ -307,9 +305,7 @@ static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
 		chip->rmh.cmd_idx  = cmd;
 		memset(&chip->rmh.cmd[1], 0, (REG_CRM_NUMBER - 1) * sizeof(u32));
 
-#ifdef CONFIG_SND_DEBUG
-		memset(chip->rmh.stat, 0, REG_CRM_NUMBER * sizeof(u32));
-#endif
+
 #ifdef RMH_DEBUG
 		chip->rmh.cmd_idx = cmd;
 #endif
@@ -474,7 +470,6 @@ exit:
 int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 {
 	u16 ret = 0;
-	u32 freq_raw = 0;
 	u32 freq = 0;
 	u32 frequency = 0;
 
@@ -488,8 +483,8 @@ int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 					ATOMIC_RESPONSE_BY_EVENT);
 
 	if (ret == 0) {
-		freq_raw = chip->rmh.stat[0] >> FREQ_FIELD_OFFSET;
-		freq = freq_raw & XES_FREQ_COUNT8_MASK;
+		freq = chip->rmh.stat[0] >> FREQ_FIELD_OFFSET;
+		freq = freq & XES_FREQ_COUNT8_MASK;
 
 		if ((freq < XES_FREQ_COUNT8_48_MAX) || 
 			(freq > XES_FREQ_COUNT8_44_MIN)) {
@@ -509,7 +504,7 @@ exit:
 		*rfreq = frequency * chip->freq_ratio;
 	return ret;
 }
-
+/*used for lx ethersound */
 int lx_dsp_get_mac(struct lx_chip *chip)
 {
 	u32 macmsb, maclsb;
@@ -517,13 +512,12 @@ int lx_dsp_get_mac(struct lx_chip *chip)
 	macmsb = lx_dsp_reg_read(chip, eReg_ADMACESMSB) & 0x00FFFFFF;
 	maclsb = lx_dsp_reg_read(chip, eReg_ADMACESLSB) & 0x00FFFFFF;
 
-	/* todo: endianness handling */
-	chip->mac_address[5] = ((u8 *)(&maclsb))[0];
-	chip->mac_address[4] = ((u8 *)(&maclsb))[1];
-	chip->mac_address[3] = ((u8 *)(&maclsb))[2];
-	chip->mac_address[2] = ((u8 *)(&macmsb))[0];
-	chip->mac_address[1] = ((u8 *)(&macmsb))[1];
-	chip->mac_address[0] = ((u8 *)(&macmsb))[2];
+	chip->mac_address[5] = ((u8)(maclsb >> 16) & 0x000000ff);
+	chip->mac_address[4] = ((u8)(maclsb >> 8) & 0x000000ff);
+	chip->mac_address[3] = ((u8)(maclsb) & 0x000000ff);
+	chip->mac_address[2] = ((u8)(macmsb >> 16) & 0x000000ff);
+	chip->mac_address[1] = ((u8)(macmsb >> 8) & 0x000000ff);
+	chip->mac_address[0] = ((u8)(macmsb) & 0x000000ff);
 
 	return 0;
 }
@@ -571,7 +565,7 @@ exit:
 }
 
 #define PIPE_INFO_TO_CMD(capture, pipe) \
-	((u32)((u32)(pipe) | ((capture) ? ID_IS_CAPTURE : 0L)) << ID_OFFSET)
+	((u32)((u32)(pipe) | ((capture) ? ID_IS_CAPTURE : 0)) << ID_OFFSET)
 
 /* low-level pipe handling */
 int lx_pipe_allocate(struct lx_chip *chip, u32 pipe, int is_capture,
@@ -718,7 +712,7 @@ exit:
 static int lx_pipe_toggle_state_play_and_record(struct lx_chip *chip)
 {
 	int ret;
-	u32 pipe_cmd = 1 << 12;
+	u32 pipe_cmd = MASK_MULTIPLE_PIPES_CMD;
 
 	mutex_lock(&chip->msg_lock);
 
@@ -729,9 +723,9 @@ static int lx_pipe_toggle_state_play_and_record(struct lx_chip *chip)
 	chip->rmh.cmd_len = 5;
 	chip->rmh.cmd[0] |= pipe_cmd;
 	chip->rmh.cmd[1] = 0;
-	chip->rmh.cmd[2] = 1;
+	chip->rmh.cmd[2] = 1; /* set pipe 0 in play */
 	chip->rmh.cmd[3] = 0;
-	chip->rmh.cmd[4] = 1;
+	chip->rmh.cmd[4] = 1; /* set pipe 0 in record */
 
 	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
 						ATOMIC_RESPONSE_BY_POLLING);
@@ -744,7 +738,7 @@ static int lx_pipe_toggle_state_play_and_record_dual(
 		struct lx_chip *master_chip, struct lx_chip *slave_chip)
 {
 	int ret;
-	u32 pipe_cmd = 1 << 12;
+	u32 pipe_cmd = MASK_MULTIPLE_PIPES_CMD;
 /*printk(KERN_DEBUG "\t\t\t%s %p %p\n", __func__, master_chip, slave_chip);*/
 
 	mutex_lock(&master_chip->msg_lock);
@@ -755,9 +749,9 @@ static int lx_pipe_toggle_state_play_and_record_dual(
 	master_chip->rmh.cmd_len = 5;
 	master_chip->rmh.cmd[0] |= pipe_cmd;
 	master_chip->rmh.cmd[1] = 0;
-	master_chip->rmh.cmd[2] = 1;
+	master_chip->rmh.cmd[2] = 1; /* set pipe 0 in play */
 	master_chip->rmh.cmd[3] = 0;
-	master_chip->rmh.cmd[4] = 1;
+	master_chip->rmh.cmd[4] = 1; /* set pipe 0 in record */
 
 	lx_message_init(slave_chip, CMD_0B_TOGGLE_PIPE_STATE);
 	/* in this case we have to specify pipes mask for play and record */
@@ -915,7 +909,7 @@ int lx_pipe_sample_count(struct lx_chip *chip, u32 pipe, int is_capture,
 				"could not query pipe's sample count\n");
 	else {
 		*rsample_count = ((u64)(chip->rmh.stat[0] & MASK_SPL_COUNT_HI)
-				<< 24) /* hi part */
+				<< 32) /* hi part */
 		+ chip->rmh.stat[1]; /* lo part */
 	}
 
@@ -1224,8 +1218,8 @@ int lx_level_unmute(struct lx_chip *chip, int is_capture, int unmute)
 		goto exit;
 	chip->rmh.cmd[0] |= PIPE_INFO_TO_CMD(is_capture, 0);
 
-	chip->rmh.cmd[1] = (u32)(mute_mask >> (u64)32); /* hi part */
-	chip->rmh.cmd[2] = (u32)(mute_mask & (u64)0xFFFFFFFF); /* lo part */
+	chip->rmh.cmd[1] = (u32)(mute_mask >> 32); /* hi part */
+	chip->rmh.cmd[2] = (u32)(mute_mask & 0xFFFFFFFF); /* lo part */
 
 	ret = lx_message_send_atomic_generic(chip, &chip->rmh,
 						ATOMIC_RESPONSE_BY_EVENT);
@@ -1299,6 +1293,7 @@ exit:
 static u32 lx_interrupt_test_ack(struct lx_chip *chip)
 {
 	u32 irqcs = lx_plx_reg_read(chip, ePLX_IRQCS);
+	unsigned char loop = 0;
 
 	/* Test if PCI Doorbell interrupt is active */
 	if (irqcs & IRQCS_ACTIVE_PCIDB) {
@@ -1306,7 +1301,8 @@ static u32 lx_interrupt_test_ack(struct lx_chip *chip)
 
 		irqcs = PCX_IRQ_NONE;
 
-		while ((temp = lx_plx_reg_read(chip, ePLX_L2PCIDB))) {
+		while ((temp = lx_plx_reg_read(chip, ePLX_L2PCIDB)) &&
+				loop < 32) {
 			/* RAZ interrupt */
 			irqcs |= temp;
 			lx_plx_reg_write(chip, ePLX_L2PCIDB, temp);
@@ -1332,18 +1328,6 @@ int lx_interrupt_debug_events(struct lx_chip *chip)
 */
 	return err;
 }
-
-void lx_wakeup_audio_thread(struct lx_chip *chip)
-{
-/*        printk(KERN_DEBUG  "%s\n", __func__); */
-
-/* Phase 1: Top half, in IRQ. */
-	if (chip->pThread != NULL) {
-		chip->thread_wakeup++;
-		wake_up(&thread_lx_wait_queue); /* => bh_handler */
-	}
-}
-;
 
 irqreturn_t lx_interrupt(int irq, void *dev_id)
 {

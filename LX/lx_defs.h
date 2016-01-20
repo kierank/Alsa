@@ -212,6 +212,7 @@ enum stream_flags {
 #define MASK_BUFFER_ID			0x00000FFF
 #define MASK_PERIOD_MULTIPLE_GRAN	0xFF000000
 #define PERIOD_MULTIPLE_GRAN_OFFSET	24
+#define MASK_MULTIPLE_PIPES_CMD		(1L <<  12)
 
 /* code adapted from PcxErr_e.h */
 
