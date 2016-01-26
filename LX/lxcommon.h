@@ -72,7 +72,10 @@ enum lx_madi_sync_mode {
 };
 
 enum lx_type {
-	LX_ETHERSOUND, LX_MADI, LX_IP, LX_IP_MADI,
+	LX_ETHERSOUND = 0,
+	LX_MADI,
+	LX_IP,
+	LX_IP_MADI,
 };
 
 struct debug_irq_counters {
@@ -270,5 +273,15 @@ void lx_proc_levels_read(struct snd_info_entry *entry,
 		struct snd_info_buffer *buffer);
 
 int lx_proc_create(struct snd_card *card, struct lx_chip *chip);
+
+
+int lx_pcm_create_generic(struct lx_chip *chip, unsigned int dma_max_size,
+			struct snd_pcm_ops *lx_ops_playback,
+			struct snd_pcm_ops *lx_ops_capture);
+int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
+		struct lx_chip **rchip, unsigned char lx_type, unsigned int dma_size, struct snd_pcm_hardware lx_caps,
+		struct snd_pcm_ops *lx_ops_playback,
+		struct snd_pcm_ops *lx_ops_capture);
+void snd_lx_generic_remove(struct pci_dev *pci);
 
 #endif /* SOUND_PCI_LXCOMMON_H_ */

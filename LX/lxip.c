@@ -331,220 +331,42 @@ static struct snd_pcm_ops lx_ops_capture = {
 		.pointer = lx_pcm_stream_pointer,
 };
 
-int lx_ip_pcm_create(struct lx_chip *chip)
-{
-	int err;
-	struct snd_pcm *pcm;
-	u32 size;
-
-	size =	LXIP_USE_CHANNELS_MAX * /* channels */
-		LXIP_SAMPLE_SIZE_MAX * /* 24 bit samples */
-		LXIP_USE_PERIODS_MAX * /* periods */
-		LXIP_GRANULARITY_MAX * /* frames per period */
-		LXIP_PERIOD_MULTIPLE_GRAN_MAX;/* max period size */
-
-/*        printk(KERN_DEBUG  "%s\n", __func__);*/
-
-	size = PAGE_ALIGN(size);
-
-	/* hardcoded device name & channel count */
-	if (chip->lx_type == LX_IP) {
-		err = snd_pcm_new(chip->card, (char *)"LX_IP", 0, 1, 1, &pcm);
-	} else {
-		err = snd_pcm_new(chip->card, (char *)"LX_IP_MADI", 0, 1, 1,
-				&pcm);
-	}
-	if (err < 0)
-		return err;
-
-	pcm->private_data = chip;
-
-	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_PLAYBACK, &lx_ops_playback);
-	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE, &lx_ops_capture);
-
-	pcm->info_flags = 0;
-	if (chip->lx_type == LX_IP)
-		strcpy(pcm->name, "LX_IP");
-	else
-		strcpy(pcm->name, "LX_IP_MADI");
-
-	err = snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
-			snd_dma_pci_data(chip->pci), size, size);
-	if (err < 0) {
-		dev_err(chip->card->dev,
-		"%s, snd_pcm_lib_preallocate_pages_for_all failed", __func__);
-		return err;
-	}
-
-	chip->pcm = pcm;
-	chip->capture_stream.is_capture = 1;
-
-	return 0;
-}
 static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 		struct lx_chip **rchip)
 {
-	struct lx_chip *chip;
 	int err;
 	unsigned int idx;
 	struct snd_kcontrol *kcontrol;
-	static struct snd_device_ops ops = {
-			.dev_free = snd_lx_dev_free,
-	};
+	struct lx_chip *chip;
 
-/*	printk(KERN_DEBUG "%s\n", __func__);*/
+	unsigned int 	dma_size =	LXIP_USE_CHANNELS_MAX * /* channels */
+			LXIP_SAMPLE_SIZE_MAX * /* 24 bit samples */
+			LXIP_USE_PERIODS_MAX * /* periods */
+			LXIP_GRANULARITY_MAX * /* frames per period */
+			LXIP_PERIOD_MULTIPLE_GRAN_MAX;/* max period size */
 
-	*rchip = NULL;
-
-	/* enable PCI device */
-	err = pci_enable_device(pci);
-	if (err < 0)
-		return err;
-
-	pci_set_master(pci);
-
-	/* check if we can restrict PCI DMA transfers to 32 bits */
-#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
-	err = dma_set_mask(&pci->dev, DMA_BIT_MASK(32));
-#elif KERNEL_VERSION(3, 19, 0) <= LINUX_VERSION_CODE
-	err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
-#elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
-	err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
-#else
-#error "kernel not supported"
-#endif
-
-	if (err < 0) {
-		dev_err(&pci->dev,
-	"%s, architecture does not support 32bit PCI busmaster DMA\n",
-		__func__);
-		pci_disable_device(pci);
-		return -ENXIO;
-	}
-
-	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
-	if (chip == NULL) {
-		err = -ENOMEM;
-		goto alloc_failed;
-	}
-
-	atomic_set(&chip->irq_pending, 0);
-	atomic_set(&chip->play_xrun_advertise, 0);
-	atomic_set(&chip->capture_xrun_advertise, 0);
-	atomic_set(&chip->debug_irq.atomic_irq_handled, 0);
-
-	chip->card = card;
-	chip->pci = pci;
-	chip->irq = -1;
 	if (pci->subsystem_device ==
 	PCI_SUBDEVICE_ID_DIGIGRAM_LXIP_SUBSYSTEM) {
-		chip->lx_type = LX_IP;
+		err = snd_create_generic(card, pci, rchip,
+					LX_IP, dma_size,
+					lx_ip_caps,
+					&lx_ops_playback,
+					&lx_ops_capture);
+
 	} else if (pci->subsystem_device ==
 	PCI_SUBDEVICE_ID_DIGIGRAM_LXIP_MADI_SUBSYSTEM) {
-		chip->lx_type = LX_IP_MADI;
+		err = snd_create_generic(card, pci, rchip,
+					LX_IP_MADI, dma_size, lx_ip_caps,
+					&lx_ops_playback, &lx_ops_capture);
+	}else
+		err = -EINVAL;
+	if(err < 0){
+		goto exit;
 	}
 
-/*	set default internal card conf to local*/
-	chip->pcm_hw = lx_ip_caps;
+	chip = *rchip;
 
-	/* initialize synchronization structs */
-	mutex_init(&chip->msg_lock);
-	mutex_init(&chip->setup_mutex);
-	chip->lx_chip_index = lx_chips_count;
-
-	/* request resources */
-	if (chip->lx_type == LX_IP)
-		err = pci_request_regions(pci, "LX_IP");
-	else
-		err = pci_request_regions(pci, "LX_IP_MADI");
-
-	if (err < 0)
-		goto request_regions_failed;
-
-	/* plx port */
-	chip->port_plx = pci_resource_start(pci, 1);
-	chip->port_plx_remapped = pci_iomap(pci, 1, 0);
-
-	/* dsp port */
-	chip->port_dsp_bar = pci_ioremap_bar(pci, 2);
-
-	chip->capture_stream.status = LX_STREAM_STATUS_STOPPED;
-	chip->playback_stream.status = LX_STREAM_STATUS_STOPPED;
-
-	chip->debug_irq.irq_all = 0;
-	chip->debug_irq.irq_wakeup_thread = 0;
-	chip->debug_irq.irq_play_begin = 0;
-	chip->debug_irq.irq_play = 0;
-	chip->debug_irq.irq_play_unhandled = 0;
-	chip->debug_irq.irq_record = 0;
-	chip->debug_irq.irq_record_unhandled = 0;
-	chip->debug_irq.irq_play_and_record = 0;
-	chip->debug_irq.irq_none = 0;
-	chip->debug_irq.irq_handled = 0;
-	atomic_set(&chip->debug_irq.atomic_irq_handled, 0);
-	chip->debug_irq.irq_urun = 0;
-	chip->debug_irq.irq_orun = 0;
-	chip->debug_irq.irq_freq = 0;
-	chip->debug_irq.irq_esa = 0;
-	chip->debug_irq.irq_timer = 0;
-	chip->debug_irq.irq_eot = 0;
-	chip->debug_irq.irq_xes = 0;
-	chip->debug_irq.wakeup_thread = 0;
-	chip->debug_irq.thread_play = 0;
-	chip->debug_irq.thread_record_but_stop = 0;
-	chip->debug_irq.thread_record = 0;
-	chip->debug_irq.thread_play_but_stop = 0;
-	chip->debug_irq.thread_play_and_record = 0;
-	chip->debug_irq.async_event_eobi = 0;
-	chip->debug_irq.async_event_eobo = 0;
-	chip->debug_irq.async_urun = 0;
-	chip->debug_irq.async_event_eobo = 0;
-	chip->debug_irq.cmd_irq_waiting = 0;
-	chip->jiffies_start = -1;
-	chip->jiffies_1st_irq = -1;
-
-	chip->irq = -1;
-
-	if (chip->lx_type == LX_IP) {
-		err = request_threaded_irq(pci->irq, lx_interrupt, NULL,
-		IRQF_SHARED, "LX-IP", chip);
-	} else {
-		err = request_threaded_irq(pci->irq, lx_interrupt, NULL,
-		IRQF_SHARED, "LX-IP-MADI", chip);
-	}
-	if (err) {
-		dev_err(&pci->dev,
-		"%s, unable to grab IRQ %d\n", __func__, pci->irq);
-		goto request_irq_failed;
-	}
-	chip->irq = pci->irq;
-
-	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
-	if (err < 0)
-		goto device_new_failed;
-
-	err = lx_init_dsp(chip);
-	if (err < 0) {
-		dev_err(&pci->dev,
-			"%s, error during DSP initialization\n",
-			__func__);
-		goto device_new_failed;
-	}
-
-	err = lx_ip_pcm_create(chip);
-	if (err < 0) {
-		dev_err(&pci->dev,
-			"%s,lx_ip_pcm_create failed\n", __func__);
-		goto device_new_failed;
-	}
-
-	err = lx_proc_create(card, chip);
-	if (err < 0) {
-		dev_err(&pci->dev,
-			"%s,lx_proc_create failed\n", __func__);
-		goto device_new_failed;
-	}
-	err = lx_ip_proc_create(card, chip);
+	err = lx_ip_proc_create(card, *rchip);
 	if (err < 0) {
 		dev_err(&pci->dev,
 			"%s,lx_proc_create failed\n", __func__);
@@ -552,7 +374,7 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 	}
 
 	for (idx = 0; idx < ARRAY_SIZE(snd_lxip_controls); idx++) {
-		kcontrol = snd_ctl_new1(&snd_lxip_controls[idx], chip);
+		kcontrol = snd_ctl_new1(&snd_lxip_controls[idx], *rchip);
 		err = snd_ctl_add(card, kcontrol);
 		if (err < 0) {
 			dev_err(&pci->dev,
@@ -567,7 +389,6 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 #elif KERNEL_VERSION(3, 10, 17) <= LINUX_VERSION_CODE
 	snd_card_set_dev(card, &pci->dev);
 #endif
-	*rchip = chip;
 
 	err = lx_pipe_open(chip, 0, LXIP_USE_CHANNELS_MAX);
 	if (err < 0) {
@@ -583,23 +404,24 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 		goto device_new_failed;
 	}
 
-	lx_chips[lx_chips_count++] = chip;
+	lx_chips[lx_chips_count++] = *rchip;
 
 	return 0;
 
 device_new_failed:
 	if (chip->irq >= 0)
-		free_irq(pci->irq, chip);
+		free_irq(pci->irq, *rchip);
 
 request_irq_failed:
 	pci_release_regions(pci);
 
 request_regions_failed:
-	kfree(chip);
+	kfree(*rchip);
 
 alloc_failed:
 	pci_disable_device(pci);
 
+exit:
 	return err;
 }
 
@@ -672,54 +494,12 @@ out_free: snd_card_free(card);
 
 }
 
-static void snd_lxip_remove(struct pci_dev *pci)
-{
-	struct snd_card *card = pci_get_drvdata(pci);
-	struct lx_chip *chip = card->private_data;
-	int is_capture = 0;
-	int err = 0;
-
-	for (is_capture = 0; is_capture <= 1; is_capture++) {
-		if (chip->hardware_running[is_capture] > 1) {
-			err = lx_pipe_stop(chip, is_capture);
-			if (err < 0) {
-				dev_err(&pci->dev,
-				"%s, failed to stop hardware. Error code %d\n",
-				__func__, err);
-			}
-
-			chip->hardware_running[is_capture] = 1;
-		}
-		if (chip->hardware_running[is_capture] == 1) {
-
-			err = lx_pipe_close(chip, is_capture);
-			if (err < 0) {
-				dev_err(&pci->dev,
-				"%s failed to close hardware. Error code %d\n",
-				__func__, err);
-			}
-			chip->hardware_running[is_capture] = 0;
-		}
-	}
-
-	lx_chips_count--;
-
-	snd_card_free(pci_get_drvdata(pci));
-#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
-/*	nothing*/
-#elif KERNEL_VERSION(3, 19, 0) >= LINUX_VERSION_CODE
-	pci_set_drvdata(pci, NULL);
-#elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
-	pci_set_drvdata(pci, NULL);
-#endif
-}
-
 static struct pci_driver lxip_driver = {
         .name =     KBUILD_MODNAME,
 	/*.name = "LX_IP_MADI",*/
 	.id_table = snd_lxip_ids,
 	.probe = snd_lxip_probe,
-	.remove = snd_lxip_remove,
+	.remove = snd_lx_generic_remove,
 };
 
 module_pci_driver(lxip_driver);
