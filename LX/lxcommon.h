@@ -279,7 +279,8 @@ int lx_pcm_create_generic(struct lx_chip *chip, unsigned int dma_max_size,
 			struct snd_pcm_ops *lx_ops_playback,
 			struct snd_pcm_ops *lx_ops_capture);
 int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
-		struct lx_chip **rchip, unsigned char lx_type, unsigned int dma_size, struct snd_pcm_hardware lx_caps,
+		struct lx_chip **rchip, unsigned char lx_type,
+		unsigned int dma_size, struct snd_pcm_hardware lx_caps,
 		struct snd_pcm_ops *lx_ops_playback,
 		struct snd_pcm_ops *lx_ops_capture);
 void snd_lx_generic_remove(struct pci_dev *pci);
