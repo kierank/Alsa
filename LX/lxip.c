@@ -339,7 +339,8 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 	struct snd_kcontrol *kcontrol;
 	struct lx_chip *chip;
 
-	unsigned int 	dma_size =	LXIP_USE_CHANNELS_MAX * /* channels */
+	unsigned int dma_size =
+			LXIP_USE_CHANNELS_MAX * /* channels */
 			LXIP_SAMPLE_SIZE_MAX * /* 24 bit samples */
 			LXIP_USE_PERIODS_MAX * /* periods */
 			LXIP_GRANULARITY_MAX * /* frames per period */
@@ -358,9 +359,9 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 		err = snd_create_generic(card, pci, rchip,
 					LX_IP_MADI, dma_size, lx_ip_caps,
 					&lx_ops_playback, &lx_ops_capture);
-	}else
+	} else
 		err = -EINVAL;
-	if(err < 0){
+	if (err < 0) {
 		goto exit;
 	}
 
@@ -495,7 +496,7 @@ out_free: snd_card_free(card);
 }
 
 static struct pci_driver lxip_driver = {
-        .name =     KBUILD_MODNAME,
+	.name = KBUILD_MODNAME,
 	/*.name = "LX_IP_MADI",*/
 	.id_table = snd_lxip_ids,
 	.probe = snd_lxip_probe,

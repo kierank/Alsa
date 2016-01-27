@@ -219,41 +219,6 @@ int lx_madi_set_clock_frequency(struct lx_chip *chip, int clock_frequency)
 	return err;
 }
 
-
-/*int lx_madi_get_madi_state(struct lx_chip *chip, struct madi_status *status)
-{
-	int err;
-
-	mutex_lock(&chip->msg_lock);
-	lx_message_init(&chip->rmh, CMD_14_GET_MADI_STATE);
-
-	err = lx_message_send_atomic(chip, &chip->rmh);
-	if (err < 0) {
-		dev_err(chip->card->dev,
-			"%s->lx_message_send_atomic failed...\n",
-			__func__);
-	}
-
-	if (status != NULL) {
-
-		status->mute = MADI_GET_MUTE(chip->rmh.stat[0]);
-		status->channel_mode = MADI_GET_CHANNEL_MODE(chip->rmh.stat[0]);
-		status->tx_frame_mode = MADI_GET_TX_FRAME_MODE(
-				chip->rmh.stat[0]);
-		status->rx_frame_mode = MADI_GET_RX_FRAME_MODE(
-				chip->rmh.stat[0]);
-
-		status->carrier_error = MADI_GET_CARRIER_ERROR(
-				chip->rmh.stat[1]);
-		status->lock_error = MADI_GET_LOCK_ERROR(chip->rmh.stat[1]);
-		status->async_error = MADI_GET_ASYNC_ERROR(chip->rmh.stat[1]);
-		status->madi_freq = MADI_GET_MADI_FREQ(chip->rmh.stat[1]);
-	}
-
-	mutex_unlock(&chip->msg_lock);
-	return err;
-}*/
-
 int lx_madi_set_clock_sync(struct lx_chip *chip, int clock_sync)
 {
 	int err = 0;
@@ -1230,8 +1195,7 @@ out_free:
 }
 
 static struct pci_driver lxmadi_driver = {
-        .name =     KBUILD_MODNAME,
-
+	.name =     KBUILD_MODNAME,
 /*	.name = "LX-MADI",*/
 	.id_table = snd_lxmadi_ids,
 	.probe = snd_lxmadi_probe,

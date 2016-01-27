@@ -23,37 +23,37 @@ struct lx_chip *lx_chips_master;
 
 /* low-level register access */
 static const unsigned long dsp_port_offsets[] = {
-        0,
-        0x400,
-        0x401,
-        0x402,
-        0x403,
-        0x404,
-        0x405,
-        0x406,
-        0x407,
-        0x408,
-        0x409,
-        0x40a,
-        0x40b,
-        0x40c,
+	0,
+	0x400,
+	0x401,
+	0x402,
+	0x403,
+	0x404,
+	0x405,
+	0x406,
+	0x407,
+	0x408,
+	0x409,
+	0x40a,
+	0x40b,
+	0x40c,
 
-        0x410,
-        0x411,
-        0x412,
-        0x413,
-        0x414,
-        0x415,
-        0x416,
+	0x410,
+	0x411,
+	0x412,
+	0x413,
+	0x414,
+	0x415,
+	0x416,
 
-        0x420,
-        0x430,
-        0x431,
-        0x432,
-        0x433,
-        0x434,
-        0x440,
-        0x500
+	0x420,
+	0x430,
+	0x431,
+	0x432,
+	0x433,
+	0x434,
+	0x440,
+	0x500
 };
 
 static void __iomem *lx_dsp_register(struct lx_chip *chip, int port)
@@ -102,18 +102,18 @@ static void lx_dsp_reg_writebuf(struct lx_chip *chip, int port, const u32 *data,
 
 
 static const unsigned long plx_port_offsets[] = {
-        0x04,
-        0x40,
-        0x44,
-        0x48,
-        0x4c,
-        0x50,
-        0x54,
-        0x58,
-        0x5c,
-        0x64,
-        0x68,
-        0x6C
+	0x04,
+	0x40,
+	0x44,
+	0x48,
+	0x4c,
+	0x50,
+	0x54,
+	0x58,
+	0x5c,
+	0x64,
+	0x68,
+	0x6C
 };
 
 static void __iomem *lx_plx_register(struct lx_chip *chip, int port)
@@ -175,116 +175,160 @@ struct dsp_cmd_info {
 
 static struct dsp_cmd_info dsp_commands[] =
 {
-        { (CMD_00_INFO_DEBUG << OPCODE_OFFSET),
-            1 /*custom*/,
-            1,
-            0,
-            CMD_NAME("INFO_DEBUG") },
-        { (CMD_01_GET_SYS_CFG << OPCODE_OFFSET),
-            1,
-            1,
-            2,
-            CMD_NAME("GET_SYS_CFG") },
-        { (CMD_02_SET_GRANULARITY << OPCODE_OFFSET),
-            1,
-            1,
-            0,
-            CMD_NAME("SET_GRANULARITY") },
-        { (CMD_03_SET_TIMER_IRQ << OPCODE_OFFSET),
-            1,
-            1,
-            0,
-            CMD_NAME("SET_TIMER_IRQ") },
-        { (CMD_04_GET_EVENT << OPCODE_OFFSET),
-            1,
-            1,
-            0 /*up to 10*/,
-            CMD_NAME("GET_EVENT") },
-        { (CMD_05_GET_PIPES << OPCODE_OFFSET),
-            1,
-            1,
-            2 /*up to 4*/,
-            CMD_NAME("GET_PIPES") },
-        { (CMD_06_ALLOCATE_PIPE << OPCODE_OFFSET),
-            1,
-            0,
-            0,
-            CMD_NAME("ALLOCATE_PIPE") },
-        { (CMD_07_RELEASE_PIPE << OPCODE_OFFSET),
-            1,
-            0,
-            0,
-            CMD_NAME("RELEASE_PIPE") },
-        { (CMD_08_ASK_BUFFERS << OPCODE_OFFSET),
-            1,
-            1,
-            MAX_STREAM_BUFFER,
-            CMD_NAME("ASK_BUFFERS") },
-        { (CMD_09_STOP_PIPE << OPCODE_OFFSET),
-            1,
-            0,
-            0 /*up to 2*/,
-            CMD_NAME("STOP_PIPE") },
-        { (CMD_0A_GET_PIPE_SPL_COUNT << OPCODE_OFFSET),
-            1,
-            1,
-            1 /*up to 2*/,
-            CMD_NAME("GET_PIPE_SPL_COUNT") },
-        { (CMD_0B_TOGGLE_PIPE_STATE << OPCODE_OFFSET),
-            1 /*up to 5*/,
-            1,
-            0,
-            CMD_NAME("TOGGLE_PIPE_STATE") },
-        { (CMD_0C_DEF_STREAM << OPCODE_OFFSET),
-            1 /*up to 4*/,
-            1,
-            0,
-            CMD_NAME("DEF_STREAM") },
-        { (CMD_0D_SET_MUTE  << OPCODE_OFFSET),
-            3,
-            1,
-            0,
-            CMD_NAME("SET_MUTE") },
-        { (CMD_0E_GET_STREAM_SPL_COUNT << OPCODE_OFFSET),
-            1,
-            1,
-            2,
-            CMD_NAME("GET_STREAM_SPL_COUNT") },
-        { (CMD_0F_UPDATE_BUFFER << OPCODE_OFFSET),
-            3 /*up to 4*/,
-            0,
-            1,
-            CMD_NAME("UPDATE_BUFFER") },
-        { (CMD_10_GET_BUFFER << OPCODE_OFFSET),
-            1,
-            1,
-            4,
-            CMD_NAME("GET_BUFFER") },
-        { (CMD_11_CANCEL_BUFFER << OPCODE_OFFSET),
-            1,
-            1,
-            1 /*up to 4*/,
-            CMD_NAME("CANCEL_BUFFER") },
-        { (CMD_12_GET_PEAK << OPCODE_OFFSET),
-            1,
-            1,
-            1,
-            CMD_NAME("GET_PEAK") },
-        { (CMD_13_SET_STREAM_STATE << OPCODE_OFFSET),
-            1,
-            1,
-            0,
-            CMD_NAME("SET_STREAM_STATE") },
-        { (CMD_14_GET_MADI_STATE << OPCODE_OFFSET),
-            1,
-            1,
-            1,
-            CMD_NAME("GET_MADI_STATE") },
-        { (CMD_15_SET_MADI_STATE << OPCODE_OFFSET),
-            2,
-            0,
-            0,
-            CMD_NAME("SET_MADI_STATE") },
+	{
+		(CMD_00_INFO_DEBUG << OPCODE_OFFSET),
+		1 /*custom*/,
+		1,
+		0,
+		CMD_NAME("INFO_DEBUG")
+	},
+	{
+		(CMD_01_GET_SYS_CFG << OPCODE_OFFSET),
+		1,
+		1,
+		2,
+		CMD_NAME("GET_SYS_CFG")
+	},
+	{
+		(CMD_02_SET_GRANULARITY << OPCODE_OFFSET),
+		1,
+		1,
+		0,
+		CMD_NAME("SET_GRANULARITY")
+	},
+	{
+		(CMD_03_SET_TIMER_IRQ << OPCODE_OFFSET),
+		1,
+		1,
+		0,
+		CMD_NAME("SET_TIMER_IRQ")
+	},
+	{
+			(CMD_04_GET_EVENT << OPCODE_OFFSET),
+		1,
+		1,
+		0 /*up to 10*/,
+		CMD_NAME("GET_EVENT")
+	},
+	{
+		(CMD_05_GET_PIPES << OPCODE_OFFSET),
+		1,
+		1,
+		2 /*up to 4*/,
+		CMD_NAME("GET_PIPES")
+	},
+	{
+		(CMD_06_ALLOCATE_PIPE << OPCODE_OFFSET),
+		1,
+		0,
+		0,
+		CMD_NAME("ALLOCATE_PIPE")
+	},
+	{
+		(CMD_07_RELEASE_PIPE << OPCODE_OFFSET),
+		1,
+		0,
+		0,
+		CMD_NAME("RELEASE_PIPE")
+	},
+	{
+		(CMD_08_ASK_BUFFERS << OPCODE_OFFSET),
+		1,
+		1,
+		MAX_STREAM_BUFFER,
+		CMD_NAME("ASK_BUFFERS")
+	},
+	{
+		(CMD_09_STOP_PIPE << OPCODE_OFFSET),
+		1,
+		0,
+		0 /*up to 2*/,
+		CMD_NAME("STOP_PIPE")
+	},
+	{
+		(CMD_0A_GET_PIPE_SPL_COUNT << OPCODE_OFFSET),
+		1,
+		1,
+		1 /*up to 2*/,
+		CMD_NAME("GET_PIPE_SPL_COUNT")
+	},
+	{
+		(CMD_0B_TOGGLE_PIPE_STATE << OPCODE_OFFSET),
+		1 /*up to 5*/,
+		1,
+		0,
+		CMD_NAME("TOGGLE_PIPE_STATE")
+	},
+	{
+		(CMD_0C_DEF_STREAM << OPCODE_OFFSET),
+		1 /*up to 4*/,
+		1,
+		0,
+		CMD_NAME("DEF_STREAM")
+	},
+	{
+		(CMD_0D_SET_MUTE  << OPCODE_OFFSET),
+		3,
+		1,
+		0,
+		CMD_NAME("SET_MUTE")
+	},
+	{
+		(CMD_0E_GET_STREAM_SPL_COUNT << OPCODE_OFFSET),
+		1,
+		1,
+		2,
+		CMD_NAME("GET_STREAM_SPL_COUNT")
+	},
+	{
+		(CMD_0F_UPDATE_BUFFER << OPCODE_OFFSET),
+		3 /*up to 4*/,
+		0,
+		1,
+		CMD_NAME("UPDATE_BUFFER")
+	},
+	{
+		(CMD_10_GET_BUFFER << OPCODE_OFFSET),
+		1,
+		1,
+		4,
+		CMD_NAME("GET_BUFFER")
+	},
+	{
+		(CMD_11_CANCEL_BUFFER << OPCODE_OFFSET),
+		1,
+		1,
+		1 /*up to 4*/,
+		CMD_NAME("CANCEL_BUFFER")
+	},
+	{
+		(CMD_12_GET_PEAK << OPCODE_OFFSET),
+		1,
+		1,
+		1,
+		CMD_NAME("GET_PEAK")
+	},
+	{
+		(CMD_13_SET_STREAM_STATE << OPCODE_OFFSET),
+		1,
+		1,
+		0,
+		CMD_NAME("SET_STREAM_STATE")
+	},
+	{
+		(CMD_14_GET_MADI_STATE << OPCODE_OFFSET),
+		1,
+		1,
+		1,
+		CMD_NAME("GET_MADI_STATE")
+	},
+	{
+		(CMD_15_SET_MADI_STATE << OPCODE_OFFSET),
+		2,
+		0,
+		0,
+		CMD_NAME("SET_MADI_STATE")
+	},
 };
 
 static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
@@ -293,17 +337,18 @@ static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
 
 	if (cmd >= CMD_INVALID) {
 		dev_err(chip->card->dev,
-			"%s unkown command...\n",__func__);
+			"%s unkown command...\n", __func__);
 		return_value = -EINVAL;
-	}
-	else {
+	} else {
 		return_value = 0;
 		chip->rmh.cmd[0]   = dsp_commands[cmd].dcCodeOp;
 		chip->rmh.cmd_len  = dsp_commands[cmd].dcCmdLength;
 		chip->rmh.stat_len = dsp_commands[cmd].dcStatusLength;
 		chip->rmh.dsp_stat = dsp_commands[cmd].dcStatusType;
 		chip->rmh.cmd_idx  = cmd;
-		memset(&chip->rmh.cmd[1], 0, (REG_CRM_NUMBER - 1) * sizeof(u32));
+		memset(&chip->rmh.cmd[1],
+			0,
+			(REG_CRM_NUMBER - 1) * sizeof(u32));
 
 
 #ifdef RMH_DEBUG
@@ -327,7 +372,7 @@ static void lx_message_dump(struct lx_rmh *rmh)
 
 	for (i = 0; i != rmh->stat_len; ++i)
 		snd_printk(LXRMH "\tstat[%d]: %08x\n", i, rmh->stat[i]);
-        snd_printk("\n");
+	snd_printk("\n");
 }
 #else
 static inline void lx_message_dump(struct lx_rmh *rmh)
@@ -346,10 +391,11 @@ enum atomic_response_type {
 };
 
 int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
-		unsigned char response_type )
+		unsigned char response_type)
 {
 	u32 reg = ED_DSP_TIMED_OUT;
 	int loop;
+
 	if (lx_dsp_reg_read(chip, eReg_CSM) & (REG_CSM_MC | REG_CSM_MR)) {
 		dev_err(chip->card->dev, "PIOSendMessage eReg_CSM %x\n", reg);
 		return -EBUSY;
@@ -357,7 +403,7 @@ int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
 
 	lx_dsp_reg_writebuf(chip, eReg_CRM1, rmh->cmd, rmh->cmd_len);
 
-	if(response_type == ATOMIC_RESPONSE_BY_EVENT)
+	if (response_type == ATOMIC_RESPONSE_BY_EVENT)
 		atomic_set(&chip->message_pending, 1);
 
 	/* MicroBlaze gogogo */
@@ -365,11 +411,12 @@ int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
 
 	loop = XILINX_TIMEOUT_MS * 1000;
 	switch (response_type) {
-	case ATOMIC_RESPONSE_BY_EVENT :
-		while ((atomic_read(&chip->message_pending) == 1) && (loop-- > 0))
+	case ATOMIC_RESPONSE_BY_EVENT:
+		while ((atomic_read(&chip->message_pending) == 1) &&
+			(loop-- > 0))
 			udelay(1);
 
-		if (atomic_read(&chip->message_pending)){
+		if (atomic_read(&chip->message_pending)) {
 			dev_err(chip->card->dev,
 				"%s, message_pending timeout...\n",
 				__func__);
@@ -392,7 +439,7 @@ int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
 
 		break;
 	case  ATOMIC_RESPONSE_BY_POLLING:
-		while(loop--> 0) {
+		while (loop-- > 0) {
 			if (lx_dsp_reg_read(chip, eReg_CSM) & REG_CSM_MR) {
 				if (rmh->dsp_stat == 0)
 					reg = lx_dsp_reg_read(chip, eReg_CRM1);
@@ -404,7 +451,7 @@ int lx_message_send_atomic_generic(struct lx_chip *chip, struct lx_rmh *rmh,
 			udelay(1);
 		}
 		dev_warn(chip->card->dev,
-			"TIMEOUT lx_message_send_atomic_poll! polling failed\n");
+		"TIMEOUT lx_message_send_atomic_poll! polling failed\n");
 
 		lx_message_dump(rmh);
 		reg = -EIO;
@@ -486,7 +533,7 @@ int lx_dsp_get_clock_frequency(struct lx_chip *chip, u32 *rfreq)
 		freq = chip->rmh.stat[0] >> FREQ_FIELD_OFFSET;
 		freq = freq & XES_FREQ_COUNT8_MASK;
 
-		if ((freq < XES_FREQ_COUNT8_48_MAX) || 
+		if ((freq < XES_FREQ_COUNT8_48_MAX) ||
 			(freq > XES_FREQ_COUNT8_44_MIN)) {
 			frequency = 0; /* unknown */
 		} else if (freq >= XES_FREQ_COUNT8_44_MAX) {

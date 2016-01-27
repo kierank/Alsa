@@ -327,7 +327,7 @@ int lx_pcm_prepare(struct snd_pcm_substream *substream)
 	while ((lx_stream->status == LX_STREAM_STATUS_SCHEDULE_STOP) &&
 			loop-- > 0)
 		udelay(1);
-	if(loop == 0)
+	if (loop == 0)
 		dev_err(chip->card->dev,
 			"timeout append when waiting for stream to stop\n");
 
@@ -729,12 +729,6 @@ int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 					link_lx_stream =
 					&link_chip->playback_stream;
 				}
-				/* if command pending */
-/*
- * 			while (link_lx_stream->status ==
- *						LX_STREAM_STATUS_SCHEDULE_RUN)
- *					;
- */
 				if (link_lx_stream->status ==
 						LX_STREAM_STATUS_SCHEDULE_RUN)
 					dev_err(link_chip->card->dev,
@@ -749,12 +743,6 @@ int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 			lx_trigger_finalize(chip, substream);
 
 		} else {
-			/*if command pending*/
-/*
- *			while (lx_stream->status ==
- *					LX_STREAM_STATUS_SCHEDULE_RUN)
- *				;
- */
 			if (lx_stream->status ==
 					LX_STREAM_STATUS_SCHEDULE_RUN)
 				dev_err(link_chip->card->dev,
@@ -768,8 +756,6 @@ int lx_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	default:
 		err = -EINVAL;
 	}
-
-/*        mutex_unlock(&chip->lock); */
 	return err;
 }
 
@@ -1379,10 +1365,10 @@ int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
 	} else if (chip->lx_type == LX_IP_MADI) {
 		err = request_threaded_irq(pci->irq, lx_interrupt, NULL,
 		IRQF_SHARED, "LX-IP-MADI", chip);
-	}else if (chip->lx_type == LX_MADI) {
+	} else if (chip->lx_type == LX_MADI) {
 		err = request_threaded_irq(pci->irq, lx_interrupt, NULL,
 		IRQF_SHARED, "LX-MADI", chip);
-	}else
+	} else
 		err = -EINVAL;
 	if (err) {
 		dev_err(&pci->dev,
@@ -1405,8 +1391,8 @@ int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
 	}
 
 	err = lx_pcm_create_generic(chip, dma_size,
-					lx_ops_playback,lx_ops_capture);
-
+					lx_ops_playback,
+					lx_ops_capture);
 	if (err < 0) {
 		dev_err(&pci->dev,
 			"%s,lx_ip_pcm_create failed\n", __func__);
@@ -1459,7 +1445,7 @@ int lx_pcm_create_generic(struct lx_chip *chip, unsigned int dma_max_size,
 	else if (chip->lx_type == LX_MADI)
 		err = snd_pcm_new(chip->card, (char *)"LX_MADI", 0, 1, 1, &pcm);
 	else
-		//unknown card
+		/*unknown card*/
 		err = -EINVAL;
 	if (err < 0)
 		return err;

@@ -705,7 +705,7 @@ config SND_LXMADI
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-lxmadi.
-	  
+
 config SND_LXIP
 	tristate "Digigram LX-IP"
 	depends on HAS_IOPORT_MAP
