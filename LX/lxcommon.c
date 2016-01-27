@@ -1223,7 +1223,8 @@ int lx_proc_create(struct snd_card *card, struct lx_chip *chip)
 
 
 int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
-		struct lx_chip **rchip, unsigned char lx_type, unsigned int dma_size, struct snd_pcm_hardware lx_caps,
+		struct lx_chip **rchip, unsigned char lx_type,
+		unsigned int dma_size, struct snd_pcm_hardware lx_caps,
 		struct snd_pcm_ops *lx_ops_playback,
 		struct snd_pcm_ops *lx_ops_capture)
 {

@@ -39,7 +39,7 @@ MODULE_PARM_DESC(enable, "Enable/disable specific Digigram LX IP soundcards.");
 
 #define PCI_DEVICE_ID_PLX_LXIP                PCI_DEVICE_ID_PLX_9056
 
-static DEFINE_PCI_DEVICE_TABLE(snd_lxip_ids) = {
+static const struct pci_device_id snd_lxip_ids[] = {
 	{
 		PCI_DEVICE(PCI_VENDOR_ID_PLX,	PCI_DEVICE_ID_PLX_LXIP),
 		.subvendor = PCI_VENDOR_ID_DIGIGRAM,
@@ -361,9 +361,8 @@ static int snd_ip_create(struct snd_card *card, struct pci_dev *pci,
 					&lx_ops_playback, &lx_ops_capture);
 	} else
 		err = -EINVAL;
-	if (err < 0) {
+	if (err < 0)
 		goto exit;
-	}
 
 	chip = *rchip;
 

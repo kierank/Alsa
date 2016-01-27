@@ -173,8 +173,7 @@ struct dsp_cmd_info {
 * the number of status words (in addition to the return value)
 */
 
-static struct dsp_cmd_info dsp_commands[] =
-{
+static struct dsp_cmd_info dsp_commands[] = {
 	{
 		(CMD_00_INFO_DEBUG << OPCODE_OFFSET),
 		1 /*custom*/,
@@ -337,7 +336,7 @@ static char lx_message_init(struct lx_chip *chip, enum cmd_mb_opcodes cmd)
 
 	if (cmd >= CMD_INVALID) {
 		dev_err(chip->card->dev,
-			"%s unkown command...\n", __func__);
+			"%s unknown command...\n", __func__);
 		return_value = -EINVAL;
 	} else {
 		return_value = 0;

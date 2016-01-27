@@ -37,7 +37,7 @@ MODULE_PARM_DESC(enable, "Enable/disable specific Digigram LXMadi soundcards.");
 
 #define PCI_DEVICE_ID_PLX_LXMADI                PCI_DEVICE_ID_PLX_9056
 
-static DEFINE_PCI_DEVICE_TABLE(snd_lxmadi_ids) = {
+static const struct pci_device_id snd_lxmadi_ids[] = {
 	{
 		PCI_DEVICE(PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_LXMADI),
 		.subvendor = PCI_VENDOR_ID_DIGIGRAM,
