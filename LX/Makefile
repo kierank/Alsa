@@ -45,6 +45,4 @@ install:
 	cp *.ko /lib/modules/$(shell uname -r)/digigram
 	depmod -ae
 
-destination:
-	mkdir /lib/modules/$(shell uname -r)/digigram
 	
