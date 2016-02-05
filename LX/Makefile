@@ -27,6 +27,7 @@ KDIR  := /lib/modules/$(shell uname -r)/build
 # source files.
 PWD   := $(shell pwd)
 
+MODULES_DIR := /lib/modules/$(shell uname -r)/digigram
 # default is the default make target.  The rule here says to run make
 # with a working directory of the directory containing the kernel
 # source and compile only the modules in the PWD (local) directory.
@@ -36,4 +37,14 @@ default:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	
+
+
+install:
+	test -d $(MODULES_DIR) || mkdir $(MODULES_DIR)
+	cp *.ko /lib/modules/$(shell uname -r)/digigram
+	depmod -ae
+
+destination:
+	mkdir /lib/modules/$(shell uname -r)/digigram
 	
