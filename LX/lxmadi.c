@@ -1094,6 +1094,8 @@ static int snd_lxmadi_create(struct snd_card *card, struct pci_dev *pci,
 	snd_card_set_dev(card, &pci->dev);
 #elif KERNEL_VERSION(3, 10, 17) <= LINUX_VERSION_CODE
 	snd_card_set_dev(card, &pci->dev);
+#elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
+	snd_card_set_dev(card, &pci->dev);
 #endif
 	*rchip = chip;
 
@@ -1155,6 +1157,8 @@ static int snd_lxmadi_probe(struct pci_dev *pci,
 			0, &card);
 #elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
 	err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
+#elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
+        err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
 #else
 #error "kernel not supported"
 #endif

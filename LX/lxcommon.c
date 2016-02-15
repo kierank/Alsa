@@ -1253,6 +1253,8 @@ int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
 	err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
 	err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
+#elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
+        err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #else
 #error "kernel not supported"
 #endif
@@ -1517,6 +1519,8 @@ void snd_lx_generic_remove(struct pci_dev *pci)
 #elif KERNEL_VERSION(3, 19, 0) <= LINUX_VERSION_CODE
 	pci_set_drvdata(pci, NULL);
 #elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
+	pci_set_drvdata(pci, NULL);
+#elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
 	pci_set_drvdata(pci, NULL);
 #endif
 }
