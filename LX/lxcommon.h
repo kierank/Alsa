@@ -12,7 +12,8 @@
 #include <sound/pcm.h>
 #include <linux/interrupt.h>
 #include "lx_core.h"
-#include <uapi/sound/asound.h>
+//#include <uapi/sound/asound.h>
+#include <sound/asound.h>
 #include <sound/info.h>
 #include <linux/atomic.h>
 #include <linux/kthread.h>

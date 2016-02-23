@@ -5,7 +5,7 @@
  * Copyright (c) 2016 Jubier Sylvain <alsa@digigram.com>
  */
 
-#include <linux/printk.h>
+//#include <linux/printk.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/list.h>
@@ -1254,6 +1254,8 @@ int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
 #elif KERNEL_VERSION(3, 10, 17) == LINUX_VERSION_CODE
 	err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
+        err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
+#elif (KERNEL_VERSION(3, 2, 68 ) == LINUX_VERSION_CODE)
         err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #else
 #error "kernel not supported"

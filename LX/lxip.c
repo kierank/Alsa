@@ -452,9 +452,11 @@ static int snd_lxip_probe(struct pci_dev *pci,
 	err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
 #elif KERNEL_VERSION(3, 10, 0) == LINUX_VERSION_CODE
         err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
+#elif (KERNEL_VERSION(3, 2, 68 ) == LINUX_VERSION_CODE) 
+        err = snd_card_create(index[dev], id[dev], THIS_MODULE, 0, &card);
 
 #else
-#error "kernel not supported"
+#error "LINUX_VERSION_CODE kernel not supported "
 #endif
 	if (err < 0)
 		return err;
