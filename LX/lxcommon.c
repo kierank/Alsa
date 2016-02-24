@@ -1257,6 +1257,8 @@ int snd_create_generic(struct snd_card *card, struct pci_dev *pci,
         err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #elif (KERNEL_VERSION(3, 2, 68 ) == LINUX_VERSION_CODE)
         err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
+#elif (KERNEL_VERSION(3, 2, 73 ) == LINUX_VERSION_CODE)
+        err = pci_set_dma_mask(pci, DMA_BIT_MASK(32));
 #else
 #error "kernel not supported"
 #endif
